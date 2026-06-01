@@ -215,11 +215,7 @@ function Logo({ size = "header" }) {
     return <img src="/adhdeeds-logo.png" alt="ADHDeeds" className="h-24 w-auto max-w-full object-contain" />;
   }
 
-  return (
-    <div className="flex h-12 w-[210px] items-center justify-center rounded-md bg-white px-3 sm:w-[260px]">
-      <img src="/adhdeeds-logo.png" alt="ADHDeeds" className="h-9 w-auto max-w-full object-contain" />
-    </div>
-  );
+  return <img src="/adhdeeds-logo.png" alt="ADHDeeds" className="h-12 w-auto max-w-[210px] object-contain sm:max-w-[260px]" />;
 }
 
 function TaskRow({ task, onToggle, onRemove, onEdit, onReframe, onMoveTomorrow, onMoveTomorrowPenalty, onDragStart, compact = false }) {
