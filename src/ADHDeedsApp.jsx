@@ -211,10 +211,15 @@ function Ring({ value, size = 70, dark = false }) {
 }
 
 function Logo({ size = "header" }) {
-  const className = size === "welcome"
-    ? "h-24 w-auto max-w-full rounded-md bg-white object-contain"
-    : "h-12 w-auto max-w-[210px] rounded-md bg-white object-contain sm:max-w-[260px]";
-  return <img src="/adhdeeds-logo.png" alt="ADHDeeds" className={className} />;
+  if (size === "welcome") {
+    return <img src="/adhdeeds-logo.png" alt="ADHDeeds" className="h-24 w-auto max-w-full object-contain" />;
+  }
+
+  return (
+    <div className="flex h-12 w-[210px] items-center justify-center rounded-md bg-white px-3 sm:w-[260px]">
+      <img src="/adhdeeds-logo.png" alt="ADHDeeds" className="h-9 w-auto max-w-full object-contain" />
+    </div>
+  );
 }
 
 function TaskRow({ task, onToggle, onRemove, onEdit, onReframe, onMoveTomorrow, onMoveTomorrowPenalty, onDragStart, compact = false }) {
