@@ -334,8 +334,8 @@ function AuthPanel({ session, authLoading, syncStatus, onGoogleSignIn, onSignIn,
   }
 
   return (
-    <form onSubmit={submit} className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200/70">
-      <div className="mb-3 flex items-center justify-between">
+    <form onSubmit={submit} className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200/70">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="text-sm font-bold text-[#112849]">Sync ADHDeeds</div>
           <div className="text-xs text-slate-400">Sign in to save tasks across devices.</div>
@@ -345,12 +345,12 @@ function AuthPanel({ session, authLoading, syncStatus, onGoogleSignIn, onSignIn,
           <button type="button" onClick={() => setMode("signup")} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${mode === "signup" ? "bg-white text-[#112849] shadow-sm" : "text-slate-500"}`}>Create</button>
         </div>
       </div>
-      <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
-        <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" placeholder="Email" className="rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#3577DE]" />
-        <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" placeholder="Password" className="rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#3577DE]" />
-        <button type="submit" className="rounded-xl bg-[#3577DE] px-4 py-2 text-sm font-semibold text-white">{mode === "signup" ? "Create" : "Sign in"}</button>
+      <div className="grid gap-2">
+        <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" placeholder="Email" className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-[#3577DE]" />
+        <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" placeholder="Password" className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-[#3577DE]" />
+        <button type="submit" className="w-full rounded-xl bg-[#3577DE] px-4 py-3 text-sm font-semibold text-white">{mode === "signup" ? "Create account" : "Sign in"}</button>
       </div>
-      <button type="button" onClick={onGoogleSignIn} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+      <button type="button" onClick={onGoogleSignIn} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
         Continue with Google
       </button>
       {message && <p className="mt-2 text-xs text-rose-600">{message}</p>}
@@ -382,7 +382,7 @@ function WelcomePage({ session, authLoading, syncStatus, onGoogleSignIn, onSignI
   return (
     <div className="min-h-screen bg-[#F3F6FB] px-4 py-8 text-slate-900 sm:px-8">
       <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-5xl flex-col justify-center">
-        <div className="grid gap-8 lg:grid-cols-[1fr_430px] lg:items-center">
+        <div className="grid gap-8 lg:grid-cols-[1fr_minmax(420px,480px)] lg:items-center">
           <div>
             <div className="flex items-center gap-3">
               <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#112849] text-xl font-extrabold text-white">A</div>
