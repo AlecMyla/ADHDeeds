@@ -214,7 +214,7 @@ function Logo({ size = "header" }) {
   const className = size === "welcome"
     ? "h-16 w-auto max-w-full rounded-md bg-white object-contain"
     : "h-10 w-auto max-w-[190px] rounded-md bg-white object-contain sm:max-w-[230px]";
-  return <img src="/adhdeeds-logo.jpg" alt="ADHDeeds" className={className} />;
+  return <img src="/adhdeeds-logo.png" alt="ADHDeeds" className={className} />;
 }
 
 function TaskRow({ task, onToggle, onRemove, onEdit, onReframe, onMoveTomorrow, onMoveTomorrowPenalty, onDragStart, compact = false }) {
