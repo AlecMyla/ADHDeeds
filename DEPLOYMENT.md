@@ -55,6 +55,8 @@ Create `.env.local` in the project root:
 ```bash
 VITE_SUPABASE_URL=https://your-project-ref.supabase.co
 VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
+OPENAI_API_KEY=your-openai-api-key
+OPENAI_MODEL=gpt-4o-mini
 ```
 
 Then run:
@@ -94,9 +96,25 @@ If GitHub asks for a password in Terminal, use a GitHub personal access token in
 7. Add Environment Variables:
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`
+   - `OPENAI_API_KEY`
+   - `OPENAI_MODEL`
 8. Deploy.
 
 You do not need to add any Supabase secret/service key. This app uses Supabase Auth and Row Level Security from the browser.
+
+`OPENAI_API_KEY` is private and must not start with `VITE_`. Vercel keeps it on the serverless API route, so it is not exposed in the browser. `OPENAI_MODEL` is optional; if you do not add it, the app uses `gpt-4o-mini`.
+
+## 4A. AI Features
+
+The app uses AI for:
+
+- Better kind reframes from task actions.
+- Improved daily plans from the Today view.
+- Short opinions from Worth Doing Next cards.
+
+If the OpenAI key is missing or the AI request fails, ADHDeeds keeps working and falls back to the built-in local suggestions.
+
+AI usage is billed to the OpenAI account behind `OPENAI_API_KEY`, even when friends or testers use the app. The `/api/ai` route checks the user's Supabase login token before making an OpenAI request, so anonymous visitors cannot call it directly. For wider testing, set a sensible usage limit in your OpenAI account dashboard.
 
 ## 5. Supabase Auth URLs
 

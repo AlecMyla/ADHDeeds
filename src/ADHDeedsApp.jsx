@@ -29,6 +29,7 @@ import {
   signOut as clearSupabaseSession,
   signUpWithPassword,
 } from "./supabaseClient";
+import { askAI } from "./aiClient";
 
 const BLUE = "#3577DE";
 const LEGACY_STORAGE_KEY = "adhdiary_mobile_app_v1";
@@ -455,30 +456,64 @@ function DailyBars({ days, tasks }) {
     </div>
   );
 }
-function NudgeCard({ task, category }) {
+function NudgeCard({ task, category, onAskOpinion }) {
   return (
     <div className="rounded-2xl bg-[#112849] p-4 text-white shadow-sm">
       <div className="text-[11px] font-semibold uppercase tracking-[.12em] text-blue-200/60">Worth doing next</div>
       {category && <div className="mt-2 inline-flex rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-semibold">{category}</div>}
       <div className="mt-3 text-[17px] font-semibold leading-tight">{task.name}</div>
       <p className="mt-2 text-xs leading-5 text-blue-100/70">{task.important ? "Marked important. Clearing this would make the week feel lighter." : "A good task to move forward while it is visible."}</p>
-      <span className="mt-3 inline-flex rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold">{task.points} points</span>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <span className="inline-flex rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold">{task.points} points</span>
+        {onAskOpinion && (
+          <button onClick={() => onAskOpinion(task)} className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1 text-[11px] font-semibold text-[#112849]">
+            <Sparkles size={12} /> Opinion
+          </button>
+        )}
+      </div>
     </div>
   );
 }
 
-function CategoryNudges({ nudges }) {
+function CategoryNudges({ nudges, onAskOpinion }) {
   if (!nudges.length) return null;
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-      {nudges.map(({ category, task }) => <NudgeCard key={category} category={category} task={task} />)}
+      {nudges.map(({ category, task }) => <NudgeCard key={category} category={category} task={task} onAskOpinion={onAskOpinion} />)}
     </div>
   );
 }
 
-function DailyPlanCard({ today, tasks, habits }) {
+function DailyPlanCard({ today, tasks, habits, aiAccessToken }) {
   const [energy, setEnergy] = useState("normal");
-  const plan = buildDailyPlan(today, tasks, habits, energy);
+  const [aiPlan, setAiPlan] = useState(null);
+  const [aiStatus, setAiStatus] = useState("");
+  const fallbackPlan = buildDailyPlan(today, tasks, habits, energy);
+  const plan = aiPlan?.items?.length ? aiPlan.items : fallbackPlan;
+
+  async function improvePlan() {
+    setAiStatus("Thinking...");
+    try {
+      const todayKey = isoDate(today);
+      const result = await askAI("daily-plan", {
+        date: todayKey,
+        energy,
+        tasks: tasks.filter((task) => task.date === todayKey && !task.done),
+        habits: habits.filter((habit) => !habit.ticks[todayKey]).map((habit) => ({ name: habit.name, detail: habit.detail, points: habit.points, mode: habit.mode })),
+      }, aiAccessToken);
+      setAiPlan(result);
+      setAiStatus("AI improved");
+    } catch {
+      setAiPlan(null);
+      setAiStatus("Using built-in plan");
+    }
+  }
+
+  useEffect(() => {
+    setAiPlan(null);
+    setAiStatus("");
+  }, [energy, today, tasks, habits]);
+
   return (
     <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200/70">
       <div className="flex items-center justify-between gap-3">
@@ -492,6 +527,10 @@ function DailyPlanCard({ today, tasks, habits }) {
           ))}
         </div>
       </div>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+        <button onClick={improvePlan} className="rounded-xl bg-blue-50 px-3 py-2 text-xs font-semibold text-[#3577DE] ring-1 ring-blue-100 hover:bg-blue-100">Improve with AI</button>
+        {aiStatus && <span className="text-xs font-semibold text-slate-400">{aiStatus}</span>}
+      </div>
       <ol className="mt-4 space-y-2">
         {plan.map((item, index) => (
           <li key={`${item}-${index}`} className="flex gap-3 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-700">
@@ -500,11 +539,12 @@ function DailyPlanCard({ today, tasks, habits }) {
           </li>
         ))}
       </ol>
+      {aiPlan?.opinion && <p className="mt-3 text-xs leading-5 text-slate-500">{aiPlan.opinion}</p>}
     </div>
   );
 }
 
-function TodayView({ today, tasks, habits, onToggleTask, onToggleHabit, onEditTask, onAddTask, onReframeTask, onMoveTomorrow, onMoveTomorrowPenalty, nudges, points, progress }) {
+function TodayView({ today, tasks, habits, aiAccessToken, onToggleTask, onToggleHabit, onEditTask, onAddTask, onReframeTask, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, nudges, points, progress }) {
   const todaysTasks = tasks.filter((t) => t.date === isoDate(today));
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4 pb-24">
@@ -521,7 +561,7 @@ function TodayView({ today, tasks, habits, onToggleTask, onToggleHabit, onEditTa
           <Flame size={16} className="text-[#6EA8FF]" /> <strong className="text-white">{points}</strong> points this week
         </div>
       </div>
-      <DailyPlanCard today={today} tasks={tasks} habits={habits} />
+      <DailyPlanCard today={today} tasks={tasks} habits={habits} aiAccessToken={aiAccessToken} />
       <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-slate-200/70">
         <div className="flex items-center justify-between px-2 pb-2 pt-1">
           <h3 className="text-sm font-bold text-[#112849]">Today’s tasks</h3>
@@ -544,7 +584,7 @@ function TodayView({ today, tasks, habits, onToggleTask, onToggleHabit, onEditTa
           <Plus size={16} /> Add task
         </button>
       </div>
-      <CategoryNudges nudges={nudges} />
+      <CategoryNudges nudges={nudges} onAskOpinion={onAskOpinion} />
       <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200/70">
         <h3 className="mb-3 text-sm font-bold text-[#112849]">Today’s habits</h3>
         <div className="space-y-2">
@@ -658,7 +698,7 @@ function MobileWeekTask({ task, days, onToggle, onEdit, onReframe, onMoveTask, o
   );
 }
 
-function WeekView({ days, tasks, onToggle, onEdit, onAddTask, onReframe, onMoveTomorrow, onMoveTomorrowPenalty, onMoveTask, today, points, taskPoints, habitPoints, nudges }) {
+function WeekView({ days, tasks, onToggle, onEdit, onAddTask, onReframe, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, onMoveTask, today, points, taskPoints, habitPoints, nudges }) {
   const initialDay = days.find((day) => isoDate(day) === isoDate(today)) || days[0];
   const [selectedDay, setSelectedDay] = useState(isoDate(initialDay));
   const done = tasks.filter((t) => t.done).length;
@@ -677,7 +717,7 @@ function WeekView({ days, tasks, onToggle, onEdit, onAddTask, onReframe, onMoveT
           <DailyBars days={days} tasks={tasks} />
         </div>
       </div>
-      <CategoryNudges nudges={nudges} />
+      <CategoryNudges nudges={nudges} onAskOpinion={onAskOpinion} />
       <div className="flex items-center justify-between lg:hidden">
         <h2 className="text-xl font-bold tracking-tight text-[#112849]">This week</h2>
         <div className="text-xs text-slate-400">Tap a day</div>
@@ -1215,12 +1255,37 @@ export default function ADHDeedsApp() {
       return { ...old, categories: [...existing, name].sort((a, b) => a.localeCompare(b)) };
     });
   }
-  function openReframeTask(task) {
-    setAiInsight({
+  async function openReframeTask(task) {
+    const fallback = {
       task,
       title: "Kind reframe",
       ...reframeTask(task),
+    };
+    setAiInsight(fallback);
+    try {
+      const result = await askAI("reframe", { task }, session?.access_token);
+      setAiInsight({ ...fallback, ...result, task, title: result.title || "Kind reframe" });
+    } catch {
+      setRescheduleAdvice("AI is unavailable right now, so I used the built-in reframe.");
+    }
+  }
+  async function openOpinion(task) {
+    const context = {
+      sameDayOpenTasks: weekTasks.filter((item) => item.date === task.date && !item.done).map((item) => ({ name: item.name, points: item.points, important: item.important })),
+      categories,
+    };
+    setAiInsight({
+      task,
+      title: "AI opinion",
+      note: task.important ? "This is already marked important. A good next move is to make the first step almost too small." : "This looks like a useful next task because it is already visible and ready to be made smaller.",
+      firstStep: `Spend 10 minutes starting ${task.name}`,
     });
+    try {
+      const result = await askAI("opinion", { task, context }, session?.access_token);
+      setAiInsight({ task, ...result, title: result.title || "AI opinion" });
+    } catch {
+      setRescheduleAdvice("AI opinion is unavailable right now, so I used the built-in view.");
+    }
   }
   function addFirstStepTask() {
     if (!aiInsight?.task || !aiInsight.firstStep) return;
@@ -1279,8 +1344,8 @@ export default function ADHDeedsApp() {
             <button key={tab.id} onClick={() => setView(tab.id)} className={`rounded-full px-5 py-2.5 text-sm font-semibold ${view === tab.id ? "bg-[#112849] text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>{tab.label}</button>
           ))}
         </div>
-        {view === "today" && <TodayView today={today} tasks={weekTasks} habits={data.habits} onToggleTask={toggleTask} onToggleHabit={toggleHabit} onEditTask={openEditTask} onAddTask={openAddTask} onReframeTask={openReframeTask} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} nudges={categoryNudges} points={points} progress={todayProgress} />}
-        {view === "week" && <WeekView days={days} tasks={weekTasks} onToggle={toggleTask} onEdit={openEditTask} onAddTask={openAddTask} onReframe={openReframeTask} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} onMoveTask={moveTask} today={today} points={points} taskPoints={taskPoints} habitPoints={habitPoints} nudges={categoryNudges} />}
+        {view === "today" && <TodayView today={today} tasks={weekTasks} habits={data.habits} aiAccessToken={session?.access_token} onToggleTask={toggleTask} onToggleHabit={toggleHabit} onEditTask={openEditTask} onAddTask={openAddTask} onReframeTask={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} nudges={categoryNudges} points={points} progress={todayProgress} />}
+        {view === "week" && <WeekView days={days} tasks={weekTasks} onToggle={toggleTask} onEdit={openEditTask} onAddTask={openAddTask} onReframe={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} onMoveTask={moveTask} today={today} points={points} taskPoints={taskPoints} habitPoints={habitPoints} nudges={categoryNudges} />}
         {view === "habits" && <HabitsView days={days} habits={data.habits} onToggle={toggleHabit} onAdd={openAddHabit} onEdit={openEditHabit} onRemove={removeHabit} />}
         {view === "tasks" && <AllTasksView tasks={weekTasks} categories={categories} onAddCategory={() => setCategorySheetOpen(true)} onToggle={toggleTask} onRemove={removeTask} onAdd={openAddTask} onEdit={openEditTask} onReframe={openReframeTask} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} />}
       </main>
