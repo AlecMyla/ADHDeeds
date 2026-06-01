@@ -22,6 +22,7 @@ import {
   getStoredSession,
   isSupabaseConfigured,
   loadDiaryData,
+  refreshSession,
   saveDiaryData,
   signInWithGoogle,
   signInWithPassword,
@@ -962,7 +963,11 @@ export default function ADHDeedsApp() {
     if (!isSupabaseConfigured) return;
     async function initialiseAuth() {
       const oauthSession = await consumeOAuthSessionFromUrl();
-      const savedSession = oauthSession || getStoredSession();
+      let savedSession = oauthSession || getStoredSession();
+      if (savedSession && !oauthSession) {
+        const refreshed = await refreshSession(savedSession);
+        savedSession = refreshed.data?.session || null;
+      }
       setSession(savedSession);
       setAuthLoading(false);
       setCloudReady(!savedSession);
@@ -981,8 +986,9 @@ export default function ADHDeedsApp() {
     async function loadCloudData() {
       setCloudReady(false);
       setSyncStatus("Loading cloud data...");
-      const { data: remoteData, error } = await loadDiaryData(session);
+      const { data: remoteData, error, session: refreshedSession } = await loadDiaryData(session);
       if (cancelled) return;
+      if (refreshedSession?.access_token !== session.access_token) setSession(refreshedSession);
       if (error) {
         setSyncStatus(`Sync error: ${error.message}`);
         setCloudReady(true);
@@ -1011,7 +1017,8 @@ export default function ADHDeedsApp() {
     setSyncStatus("Saving...");
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
-      const { error } = await saveDiaryData(session, data);
+      const { error, session: refreshedSession } = await saveDiaryData(session, data);
+      if (refreshedSession?.access_token !== session.access_token) setSession(refreshedSession);
       setSyncStatus(error ? `Sync error: ${error.message}` : "Synced");
     }, 650);
     return () => {
