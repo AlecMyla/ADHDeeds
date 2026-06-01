@@ -437,15 +437,15 @@ function DailyBars({ days, tasks }) {
   return (
     <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200/70">
       <div className="text-[11px] font-semibold uppercase tracking-[.12em] text-slate-400">By day</div>
-      <div className="mt-4 flex h-[76px] items-end justify-between gap-3">
+      <div className="mt-3 flex h-[58px] items-end justify-between gap-2 sm:h-[76px] sm:gap-3">
         {days.map((day) => {
           const daily = tasks.filter((t) => t.date === isoDate(day));
           const done = daily.filter((t) => t.done).length;
           const pct = daily.length ? Math.round((done / daily.length) * 100) : 0;
-          const available = daily.length ? Math.min(62, 13 + daily.length * 18) : 7;
+          const available = daily.length ? Math.min(44, 10 + daily.length * 12) : 6;
           return (
             <div key={isoDate(day)} className="flex flex-1 flex-col items-center gap-1.5">
-              <div className="relative w-full max-w-[27px] overflow-hidden rounded-t-md bg-slate-100" style={{ height: available }}>
+              <div className="relative w-full max-w-[24px] overflow-hidden rounded-t-md bg-slate-100 sm:max-w-[27px]" style={{ height: available }}>
                 <motion.div animate={{ height: `${pct}%` }} className="absolute bottom-0 w-full rounded-t-md bg-[#3577DE]" />
               </div>
               <span className="text-[10px] font-semibold text-slate-400">{pretty(day, { weekday: "short" }).slice(0, 3)}</span>
@@ -609,7 +609,11 @@ function DayCard({ day, tasks, onToggle, onEdit, onReframe, onMoveTomorrow, onMo
   );
 }
 function WeekView({ days, tasks, onToggle, onEdit, onReframe, onMoveTomorrow, onMoveTomorrowPenalty, onMoveTask, today, points, taskPoints, habitPoints, nudges }) {
+  const initialDay = days.find((day) => isoDate(day) === isoDate(today)) || days[0];
+  const [selectedDay, setSelectedDay] = useState(isoDate(initialDay));
   const done = tasks.filter((t) => t.done).length;
+  const selectedDate = days.find((day) => isoDate(day) === selectedDay) || days[0];
+  const selectedTasks = tasks.filter((task) => task.date === selectedDay);
   function dragTask(event, taskId) {
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", taskId);
@@ -619,14 +623,57 @@ function WeekView({ days, tasks, onToggle, onEdit, onReframe, onMoveTomorrow, on
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         <ScoreCard points={points} taskPoints={taskPoints} habitPoints={habitPoints} />
         <ProgressCard done={done} total={tasks.length} />
-        <DailyBars days={days} tasks={tasks} />
+        <div className="col-span-2 lg:col-span-1">
+          <DailyBars days={days} tasks={tasks} />
+        </div>
       </div>
       <CategoryNudges nudges={nudges} />
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between lg:hidden">
+        <h2 className="text-xl font-bold tracking-tight text-[#112849]">This week</h2>
+        <div className="text-xs text-slate-400">Tap a day</div>
+      </div>
+      <div className="grid grid-cols-7 gap-1.5 lg:hidden">
+        {days.map((day) => {
+          const dayKey = isoDate(day);
+          const dayTasks = tasks.filter((task) => task.date === dayKey);
+          const isSelected = selectedDay === dayKey;
+          const isToday = isoDate(today) === dayKey;
+          return (
+            <button key={dayKey} onClick={() => setSelectedDay(dayKey)} className={`rounded-xl px-1 py-2 text-center ring-1 transition ${isSelected ? "bg-[#112849] text-white ring-[#112849]" : "bg-white text-slate-500 ring-slate-200"}`}>
+              <div className="text-[10px] font-bold uppercase">{pretty(day, { weekday: "short" }).slice(0, 1)}</div>
+              <div className="mt-1 text-sm font-bold">{pretty(day, { day: "numeric" })}</div>
+              <div className={`mx-auto mt-1 h-1.5 w-1.5 rounded-full ${dayTasks.length ? isSelected ? "bg-white" : "bg-[#3577DE]" : isToday ? "bg-amber-400" : "bg-transparent"}`} />
+            </button>
+          );
+        })}
+      </div>
+      <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-slate-200/70 lg:hidden">
+        <div className="flex items-center justify-between px-2 pb-2 pt-1">
+          <div>
+            <h3 className="text-sm font-bold text-[#112849]">{pretty(selectedDate, { weekday: "long" })}</h3>
+            <p className="text-xs text-slate-400">{pretty(selectedDate, { day: "numeric", month: "long" })}</p>
+          </div>
+          <span className="text-xs text-slate-400">{selectedTasks.filter((task) => task.done).length} / {selectedTasks.length} complete</span>
+        </div>
+        <div className="divide-y divide-slate-100">
+          {selectedTasks.length ? selectedTasks.map((task) => (
+            <TaskRow
+              key={task.id}
+              task={task}
+              onToggle={onToggle}
+              onEdit={onEdit}
+              onReframe={onReframe}
+              onMoveTomorrow={onMoveTomorrow}
+              onMoveTomorrowPenalty={onMoveTomorrowPenalty}
+            />
+          )) : <div className="p-5 text-center text-sm text-slate-400">No tasks planned.</div>}
+        </div>
+      </div>
+      <div className="hidden items-center justify-between lg:flex">
         <h2 className="text-xl font-bold tracking-tight text-[#112849]">This week</h2>
         <div className="text-xs text-slate-400">Drag tasks between days</div>
       </div>
-      <div className="-mx-4 flex snap-x gap-4 overflow-x-auto px-4 pb-3 sm:-mx-8 sm:px-8 lg:mx-0 lg:grid lg:grid-cols-7 lg:gap-3 lg:overflow-visible lg:px-0">
+      <div className="hidden lg:mx-0 lg:grid lg:grid-cols-7 lg:gap-3 lg:overflow-visible lg:px-0">
         {days.map((day) => (
           <div className="snap-start lg:min-w-0" key={isoDate(day)}>
             <DayCard
