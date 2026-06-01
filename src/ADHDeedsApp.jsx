@@ -277,10 +277,10 @@ function TaskRow({ task, onToggle, onRemove, onEdit, onReframe, onMoveTomorrow, 
 
 function Header({ activeWeek, setActiveWeek, onAdd, onProfile, points }) {
   return (
-    <header className="bg-[#112849] px-4 py-3 text-white sm:px-8">
-      <div className="mx-auto flex max-w-none flex-wrap items-center justify-between gap-3 2xl:max-w-[1800px]">
-        <Logo />
-        <div className="order-3 flex w-full items-center justify-between rounded-xl bg-white/10 p-1 sm:order-none sm:w-[280px]">
+    <header className="relative bg-[#112849] px-4 py-3 text-white sm:px-8">
+      <div className="mx-auto grid max-w-none grid-cols-[1fr_auto] items-center gap-3 md:grid-cols-[1fr_auto_1fr] 2xl:max-w-[1800px]">
+        <div className="justify-self-start"><Logo /></div>
+        <div className="order-3 col-span-2 flex w-full items-center justify-between rounded-xl bg-white/10 p-1 md:order-none md:col-span-1 md:w-[280px] md:justify-self-center">
           <button onClick={() => setActiveWeek(addDays(activeWeek, -7))} className="grid h-9 w-9 place-items-center rounded-lg text-blue-100 hover:bg-white/10"><ChevronLeft size={20} /></button>
           <div className="text-center">
             <div className="text-[10px] uppercase tracking-widest text-blue-200/70">Week of</div>
@@ -288,7 +288,7 @@ function Header({ activeWeek, setActiveWeek, onAdd, onProfile, points }) {
           </div>
           <button onClick={() => setActiveWeek(addDays(activeWeek, 7))} className="grid h-9 w-9 place-items-center rounded-lg text-blue-100 hover:bg-white/10"><ChevronRight size={20} /></button>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 justify-self-end">
           <div className="hidden rounded-full border border-white/15 px-3 py-2 text-sm sm:block"><strong>{points}</strong> points</div>
           <button onClick={onAdd} className="flex h-10 items-center gap-2 rounded-xl bg-[#3577DE] px-3 text-sm font-semibold shadow-lg shadow-blue-950/20 hover:bg-blue-500">
             <Plus size={17} /> <span className="hidden sm:inline">Add task</span>
@@ -369,7 +369,7 @@ function ProfileSheet({ open, onClose, session, authLoading, syncStatus, onGoogl
       {open && (
         <>
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="fixed inset-0 z-40 bg-slate-950/40" />
-          <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} transition={{ type: "spring", damping: 27, stiffness: 280 }} className="fixed inset-x-0 bottom-0 z-50 rounded-t-[28px] bg-[#F3F6FB] px-5 pb-[max(1.4rem,env(safe-area-inset-bottom))] pt-4 shadow-2xl sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-[520px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-3xl sm:p-6">
+          <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} transition={{ type: "spring", damping: 27, stiffness: 280 }} className="fixed inset-x-0 bottom-0 z-50 rounded-t-[28px] bg-[#F3F6FB] px-5 pb-[max(1.4rem,env(safe-area-inset-bottom))] pt-4 shadow-2xl sm:inset-auto sm:right-8 sm:top-[76px] sm:w-[360px] sm:translate-x-0 sm:translate-y-0 sm:rounded-2xl sm:p-4">
             <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-slate-200 sm:hidden" />
             <div className="mb-5 flex items-center justify-between">
               <h2 className="text-xl font-bold tracking-tight text-[#112849]">Profile</h2>
@@ -861,7 +861,7 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, categories,
       {open && (
         <>
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="fixed inset-0 z-40 bg-slate-950/40" />
-          <motion.form onSubmit={submit} initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} transition={{ type: "spring", damping: 27, stiffness: 280 }} className="fixed inset-x-0 bottom-0 z-50 rounded-t-[28px] bg-white px-5 pb-[max(1.4rem,env(safe-area-inset-bottom))] pt-4 shadow-2xl sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-[470px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-3xl sm:p-6">
+          <motion.form onSubmit={submit} initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} transition={{ type: "spring", damping: 27, stiffness: 280 }} className="fixed inset-x-0 bottom-0 z-50 rounded-t-[28px] bg-white px-5 pb-[max(1.4rem,env(safe-area-inset-bottom))] pt-4 shadow-2xl sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-[470px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-3xl sm:p-6 sm:[animation:none]">
             <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-slate-200 sm:hidden" />
             <div className="mb-5 flex items-center justify-between"><h2 className="text-xl font-bold tracking-tight text-[#112849]">{task ? "Edit task" : "Add a task"}</h2><button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-slate-100 text-slate-500"><X size={18}/></button></div>
             <div className="space-y-4">
