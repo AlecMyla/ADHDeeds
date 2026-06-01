@@ -212,8 +212,8 @@ function Ring({ value, size = 70, dark = false }) {
 
 function Logo({ size = "header" }) {
   const className = size === "welcome"
-    ? "h-16 w-auto max-w-full rounded-md bg-white object-contain"
-    : "h-10 w-auto max-w-[190px] rounded-md bg-white object-contain sm:max-w-[230px]";
+    ? "h-24 w-auto max-w-full rounded-md bg-white object-contain"
+    : "h-12 w-auto max-w-[210px] rounded-md bg-white object-contain sm:max-w-[260px]";
   return <img src="/adhdeeds-logo.png" alt="ADHDeeds" className={className} />;
 }
 
