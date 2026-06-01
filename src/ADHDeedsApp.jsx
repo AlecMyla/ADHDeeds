@@ -276,7 +276,7 @@ function TaskRow({ task, onToggle, onRemove, onEdit, onReframe, onMoveTomorrow, 
   );
 }
 
-function Header({ activeWeek, setActiveWeek, onAdd, onProfile, points }) {
+function Header({ activeWeek, setActiveWeek, onProfile, points }) {
   return (
     <header className="relative bg-[#112849] px-4 py-3 text-white sm:px-8">
       <div className="mx-auto grid max-w-none grid-cols-[1fr_auto] items-center gap-3 md:grid-cols-[1fr_auto_1fr] 2xl:max-w-[1800px]">
@@ -290,10 +290,7 @@ function Header({ activeWeek, setActiveWeek, onAdd, onProfile, points }) {
           <button onClick={() => setActiveWeek(addDays(activeWeek, 7))} className="grid h-9 w-9 place-items-center rounded-lg text-blue-100 hover:bg-white/10"><ChevronRight size={20} /></button>
         </div>
         <div className="flex items-center gap-2 justify-self-end">
-          <div className="hidden rounded-full border border-white/15 px-3 py-2 text-sm sm:block"><strong>{points}</strong> points</div>
-          <button onClick={onAdd} className="flex h-10 items-center gap-2 rounded-xl bg-[#3577DE] px-3 text-sm font-semibold shadow-lg shadow-blue-950/20 hover:bg-blue-500">
-            <Plus size={17} /> <span className="hidden sm:inline">Add task</span>
-          </button>
+          <div className="rounded-full border border-white/15 px-3 py-2 text-sm"><strong>{points}</strong> points</div>
           <button onClick={onProfile} className="h-10 rounded-xl bg-white/10 px-3 text-sm font-semibold hover:bg-white/15">Profile</button>
         </div>
       </div>
@@ -507,7 +504,7 @@ function DailyPlanCard({ today, tasks, habits }) {
   );
 }
 
-function TodayView({ today, tasks, habits, onToggleTask, onToggleHabit, onEditTask, onReframeTask, onMoveTomorrow, onMoveTomorrowPenalty, nudges, points, progress }) {
+function TodayView({ today, tasks, habits, onToggleTask, onToggleHabit, onEditTask, onAddTask, onReframeTask, onMoveTomorrow, onMoveTomorrowPenalty, nudges, points, progress }) {
   const todaysTasks = tasks.filter((t) => t.date === isoDate(today));
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4 pb-24">
@@ -543,6 +540,9 @@ function TodayView({ today, tasks, habits, onToggleTask, onToggleHabit, onEditTa
             />
           )) : <p className="p-4 text-sm text-slate-400">Nothing planned today.</p>}
         </div>
+        <button onClick={() => onAddTask(isoDate(today))} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-50 py-3 text-sm font-semibold text-[#3577DE] ring-1 ring-blue-100 hover:bg-blue-100">
+          <Plus size={16} /> Add task
+        </button>
       </div>
       <CategoryNudges nudges={nudges} />
       <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200/70">
@@ -564,7 +564,7 @@ function TodayView({ today, tasks, habits, onToggleTask, onToggleHabit, onEditTa
   );
 }
 
-function DayCard({ day, tasks, onToggle, onEdit, onReframe, onMoveTomorrow, onMoveTomorrowPenalty, onDropTask, onDragTask, today }) {
+function DayCard({ day, tasks, onToggle, onEdit, onAddTask, onReframe, onMoveTomorrow, onMoveTomorrowPenalty, onDropTask, onDragTask, today }) {
   const [dragOver, setDragOver] = useState(false);
   const completed = tasks.filter((t) => t.done).length;
   const pct = tasks.length ? Math.round((completed / tasks.length) * 100) : 0;
@@ -606,6 +606,9 @@ function DayCard({ day, tasks, onToggle, onEdit, onReframe, onMoveTomorrow, onMo
             />
           )) : <div className="pt-8 text-center text-xs text-slate-400">Drop tasks here</div>}
         </div>
+        <button onClick={() => onAddTask(dayKey)} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-50 py-2.5 text-xs font-semibold text-[#3577DE] ring-1 ring-blue-100 hover:bg-blue-100">
+          <Plus size={15} /> Add task
+        </button>
       </div>
     </motion.article>
   );
@@ -655,7 +658,7 @@ function MobileWeekTask({ task, days, onToggle, onEdit, onReframe, onMoveTask, o
   );
 }
 
-function WeekView({ days, tasks, onToggle, onEdit, onReframe, onMoveTomorrow, onMoveTomorrowPenalty, onMoveTask, today, points, taskPoints, habitPoints, nudges }) {
+function WeekView({ days, tasks, onToggle, onEdit, onAddTask, onReframe, onMoveTomorrow, onMoveTomorrowPenalty, onMoveTask, today, points, taskPoints, habitPoints, nudges }) {
   const initialDay = days.find((day) => isoDate(day) === isoDate(today)) || days[0];
   const [selectedDay, setSelectedDay] = useState(isoDate(initialDay));
   const done = tasks.filter((t) => t.done).length;
@@ -717,6 +720,9 @@ function WeekView({ days, tasks, onToggle, onEdit, onReframe, onMoveTomorrow, on
             />
           )) : <div className="p-5 text-center text-sm text-slate-400">No tasks planned.</div>}
         </div>
+        <button onClick={() => onAddTask(selectedDay)} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-50 py-3 text-sm font-semibold text-[#3577DE] ring-1 ring-blue-100 hover:bg-blue-100">
+          <Plus size={16} /> Add task
+        </button>
       </div>
       <div className="hidden items-center justify-between lg:flex">
         <h2 className="text-xl font-bold tracking-tight text-[#112849]">This week</h2>
@@ -730,6 +736,7 @@ function WeekView({ days, tasks, onToggle, onEdit, onReframe, onMoveTomorrow, on
               tasks={tasks.filter((t) => t.date === isoDate(day))}
               onToggle={onToggle}
               onEdit={onEdit}
+              onAddTask={onAddTask}
               onReframe={onReframe}
               onMoveTomorrow={onMoveTomorrow}
               onMoveTomorrowPenalty={onMoveTomorrowPenalty}
@@ -820,7 +827,7 @@ function AllTasksView({ tasks, categories, onAddCategory, onToggle, onRemove, on
   );
 }
 
-function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, categories, onAddCategory }) {
+function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate, categories, onAddCategory }) {
   const [name, setName] = useState("");
   const [category, setCategory] = useState(categories[0] || "");
   const [date, setDate] = useState(isoDate(days[0]));
@@ -831,11 +838,11 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, categories,
     if (!open) return;
     setName(task?.name || "");
     setCategory(task?.category || categories[0] || "");
-    setDate(task?.date || isoDate(days[0]));
+    setDate(task?.date || initialDate || isoDate(days[0]));
     setPoints(task?.points || 10);
     setImportant(!!task?.important);
     setBreakdown([]);
-  }, [open, days, task]);
+  }, [open, days, task, initialDate, categories]);
   useEffect(() => {
     if (open && !category && categories.length) setCategory(categories[0]);
   }, [open, category, categories]);
@@ -1040,6 +1047,7 @@ export default function ADHDeedsApp() {
   const [view, setView] = useState("today");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
+  const [newTaskDate, setNewTaskDate] = useState(null);
   const [habitSheetOpen, setHabitSheetOpen] = useState(false);
   const [editingHabit, setEditingHabit] = useState(null);
   const [aiInsight, setAiInsight] = useState(null);
@@ -1140,17 +1148,20 @@ export default function ADHDeedsApp() {
   function removeTask(id) { setData((old) => ({ ...old, tasks: old.tasks.filter((task) => task.id !== id) })); }
   function addTask(task) { setData((old) => ({ ...old, tasks: [...old.tasks, task] })); }
   function updateTask(updatedTask) { setData((old) => ({ ...old, tasks: old.tasks.map((task) => task.id === updatedTask.id ? updatedTask : task) })); }
-  function openAddTask() {
+  function openAddTask(date = null) {
     setEditingTask(null);
+    setNewTaskDate(date);
     setSheetOpen(true);
   }
   function openEditTask(task) {
     setEditingTask(task);
+    setNewTaskDate(null);
     setSheetOpen(true);
   }
   function closeSheet() {
     setSheetOpen(false);
     setEditingTask(null);
+    setNewTaskDate(null);
   }
   function moveTask(id, date, penalize = false) {
     if (!id || !date) return;
@@ -1261,20 +1272,20 @@ export default function ADHDeedsApp() {
 
   return (
     <div className="min-h-screen bg-[#F3F6FB] font-sans text-slate-900">
-      <Header activeWeek={activeWeek} setActiveWeek={setActiveWeek} onAdd={openAddTask} onProfile={() => setProfileOpen(true)} points={points} />
+      <Header activeWeek={activeWeek} setActiveWeek={setActiveWeek} onProfile={() => setProfileOpen(true)} points={points} />
       <main className={`mx-auto px-4 py-5 sm:px-8 sm:py-7 ${view === "week" ? "max-w-none 2xl:max-w-[1800px]" : "max-w-7xl"}`}>
         <div className="hidden gap-2 pb-6 sm:flex">
           {[{id:"today",label:"Today"},{id:"week",label:"Week"},{id:"habits",label:"Habits"},{id:"tasks",label:"All tasks"}].map((tab) => (
             <button key={tab.id} onClick={() => setView(tab.id)} className={`rounded-full px-5 py-2.5 text-sm font-semibold ${view === tab.id ? "bg-[#112849] text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>{tab.label}</button>
           ))}
         </div>
-        {view === "today" && <TodayView today={today} tasks={weekTasks} habits={data.habits} onToggleTask={toggleTask} onToggleHabit={toggleHabit} onEditTask={openEditTask} onReframeTask={openReframeTask} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} nudges={categoryNudges} points={points} progress={todayProgress} />}
-        {view === "week" && <WeekView days={days} tasks={weekTasks} onToggle={toggleTask} onEdit={openEditTask} onReframe={openReframeTask} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} onMoveTask={moveTask} today={today} points={points} taskPoints={taskPoints} habitPoints={habitPoints} nudges={categoryNudges} />}
+        {view === "today" && <TodayView today={today} tasks={weekTasks} habits={data.habits} onToggleTask={toggleTask} onToggleHabit={toggleHabit} onEditTask={openEditTask} onAddTask={openAddTask} onReframeTask={openReframeTask} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} nudges={categoryNudges} points={points} progress={todayProgress} />}
+        {view === "week" && <WeekView days={days} tasks={weekTasks} onToggle={toggleTask} onEdit={openEditTask} onAddTask={openAddTask} onReframe={openReframeTask} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} onMoveTask={moveTask} today={today} points={points} taskPoints={taskPoints} habitPoints={habitPoints} nudges={categoryNudges} />}
         {view === "habits" && <HabitsView days={days} habits={data.habits} onToggle={toggleHabit} onAdd={openAddHabit} onEdit={openEditHabit} onRemove={removeHabit} />}
         {view === "tasks" && <AllTasksView tasks={weekTasks} categories={categories} onAddCategory={() => setCategorySheetOpen(true)} onToggle={toggleTask} onRemove={removeTask} onAdd={openAddTask} onEdit={openEditTask} onReframe={openReframeTask} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} />}
       </main>
       <BottomNav view={view} setView={setView} onAdd={openAddTask} />
-      <AddTaskSheet open={sheetOpen} onClose={closeSheet} onSave={addTask} onUpdate={updateTask} days={days} task={editingTask} categories={categories} onAddCategory={() => setCategorySheetOpen(true)} />
+      <AddTaskSheet open={sheetOpen} onClose={closeSheet} onSave={addTask} onUpdate={updateTask} days={days} task={editingTask} initialDate={newTaskDate} categories={categories} onAddCategory={() => setCategorySheetOpen(true)} />
       <HabitSheet open={habitSheetOpen} onClose={closeHabitSheet} onSave={addHabit} onUpdate={updateHabit} habit={editingHabit} />
       <CategorySheet open={categorySheetOpen} onClose={() => setCategorySheetOpen(false)} onSave={addCategory} />
       <ProfileSheet open={profileOpen} onClose={() => setProfileOpen(false)} session={session} authLoading={authLoading} syncStatus={syncStatus} onGoogleSignIn={signInWithGoogle} onSignIn={signIn} onSignOut={signOut} />
