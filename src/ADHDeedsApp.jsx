@@ -608,6 +608,51 @@ function DayCard({ day, tasks, onToggle, onEdit, onReframe, onMoveTomorrow, onMo
     </motion.article>
   );
 }
+
+function MobileWeekTask({ task, days, onToggle, onEdit, onReframe, onMoveTask, onMoveTomorrow, onMoveTomorrowPenalty }) {
+  const [moving, setMoving] = useState(false);
+
+  return (
+    <div>
+      <TaskRow
+        task={task}
+        onToggle={onToggle}
+        onEdit={onEdit}
+        onReframe={onReframe}
+        onMoveTomorrow={onMoveTomorrow}
+        onMoveTomorrowPenalty={onMoveTomorrowPenalty}
+      />
+      <div className="px-3 pb-3">
+        <button onClick={() => setMoving(!moving)} className="rounded-full bg-slate-100 px-3 py-1.5 text-[11px] font-semibold text-slate-500">
+          {moving ? "Close move options" : "Move to another day"}
+        </button>
+        {moving && (
+          <div className="mt-2 grid grid-cols-7 gap-1.5">
+            {days.map((day) => {
+              const dayKey = isoDate(day);
+              const current = task.date === dayKey;
+              return (
+                <button
+                  key={dayKey}
+                  disabled={current}
+                  onClick={() => {
+                    onMoveTask(task.id, dayKey);
+                    setMoving(false);
+                  }}
+                  className={`rounded-lg px-1 py-2 text-center text-[11px] font-bold ring-1 ${current ? "bg-[#112849] text-white ring-[#112849]" : "bg-white text-slate-500 ring-slate-200"}`}
+                >
+                  <div>{pretty(day, { weekday: "short" }).slice(0, 1)}</div>
+                  <div>{pretty(day, { day: "numeric" })}</div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function WeekView({ days, tasks, onToggle, onEdit, onReframe, onMoveTomorrow, onMoveTomorrowPenalty, onMoveTask, today, points, taskPoints, habitPoints, nudges }) {
   const initialDay = days.find((day) => isoDate(day) === isoDate(today)) || days[0];
   const [selectedDay, setSelectedDay] = useState(isoDate(initialDay));
@@ -657,12 +702,14 @@ function WeekView({ days, tasks, onToggle, onEdit, onReframe, onMoveTomorrow, on
         </div>
         <div className="divide-y divide-slate-100">
           {selectedTasks.length ? selectedTasks.map((task) => (
-            <TaskRow
+            <MobileWeekTask
               key={task.id}
               task={task}
+              days={days}
               onToggle={onToggle}
               onEdit={onEdit}
               onReframe={onReframe}
+              onMoveTask={onMoveTask}
               onMoveTomorrow={onMoveTomorrow}
               onMoveTomorrowPenalty={onMoveTomorrowPenalty}
             />
