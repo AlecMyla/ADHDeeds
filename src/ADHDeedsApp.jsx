@@ -210,6 +210,13 @@ function Ring({ value, size = 70, dark = false }) {
   );
 }
 
+function Logo({ size = "header" }) {
+  const className = size === "welcome"
+    ? "h-16 w-auto max-w-full rounded-md bg-white object-contain"
+    : "h-10 w-auto max-w-[190px] rounded-md bg-white object-contain sm:max-w-[230px]";
+  return <img src="/adhdeeds-logo.jpg" alt="ADHDeeds" className={className} />;
+}
+
 function TaskRow({ task, onToggle, onRemove, onEdit, onReframe, onMoveTomorrow, onMoveTomorrowPenalty, onDragStart, compact = false }) {
   return (
     <motion.div
@@ -272,10 +279,7 @@ function Header({ activeWeek, setActiveWeek, onAdd, onProfile, points }) {
   return (
     <header className="bg-[#112849] px-4 py-3 text-white sm:px-8">
       <div className="mx-auto flex max-w-none flex-wrap items-center justify-between gap-3 2xl:max-w-[1800px]">
-        <div className="flex items-center gap-3">
-          <div className="grid h-10 w-10 place-items-center rounded-xl bg-white text-lg font-extrabold text-[#112849]">A</div>
-          <h1 className="text-[22px] font-bold tracking-tight">ADHDeeds</h1>
-        </div>
+        <Logo />
         <div className="order-3 flex w-full items-center justify-between rounded-xl bg-white/10 p-1 sm:order-none sm:w-[280px]">
           <button onClick={() => setActiveWeek(addDays(activeWeek, -7))} className="grid h-9 w-9 place-items-center rounded-lg text-blue-100 hover:bg-white/10"><ChevronLeft size={20} /></button>
           <div className="text-center">
@@ -385,12 +389,9 @@ function WelcomePage({ session, authLoading, syncStatus, onGoogleSignIn, onSignI
       <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-5xl flex-col justify-center">
         <div className="grid gap-8 lg:grid-cols-[1fr_minmax(420px,480px)] lg:items-center">
           <div>
-            <div className="flex items-center gap-3">
-              <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#112849] text-xl font-extrabold text-white">A</div>
-              <div>
-                <h1 className="text-3xl font-bold tracking-tight text-[#112849]">ADHDeeds</h1>
-                <p className="mt-1 text-sm text-slate-500">Plan your week, move what changes, and keep the next step visible.</p>
-              </div>
+            <div>
+              <Logo size="welcome" />
+              <p className="mt-4 max-w-md text-sm leading-6 text-slate-500">Plan your week, move what changes, and keep the next step visible.</p>
             </div>
             <div className="mt-8 grid gap-3 sm:grid-cols-3">
               {["Tasks", "Habits", "Week"].map((item) => (
