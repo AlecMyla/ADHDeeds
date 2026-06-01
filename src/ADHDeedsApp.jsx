@@ -33,7 +33,26 @@ const BLUE = "#3577DE";
 const LEGACY_STORAGE_KEY = "adhdiary_mobile_app_v1";
 const STORAGE_KEY = "adhdeeds_mobile_app_v1";
 
-const CATEGORIES = ["Work", "Personal", "Home", "Health", "Family", "Finance"];
+const DEFAULT_CATEGORIES = [];
+const LEGACY_SAMPLE_TASK_NAMES = new Set([
+  "HDI email",
+  "Order contact lenses",
+  "Roland onboarding sessions",
+  "Call my GP",
+  "Organise Hartford call",
+  "Send QBE DocuSign",
+  "Find styles for holiday / summer",
+  "Find bridge for water pipe",
+  "Submit PSA application",
+]);
+const LEGACY_SAMPLE_HABIT_IDS = new Set(["sleep", "dogs", "clothes", "office"]);
+const LEGACY_SAMPLE_HABIT_NAMES = new Set([
+  "7+ hours sleep",
+  "Walk the dogs",
+  "Clean clothes put away",
+  "Go into the office",
+]);
+const LEGACY_DEFAULT_CATEGORIES = new Set(["Work", "Personal", "Home", "Health", "Family", "Finance"]);
 const POINT_OPTIONS = [
   { label: "Quick", value: 5 },
   { label: "Standard", value: 10 },
@@ -81,43 +100,38 @@ function categoryStyle(category) {
   return styles[category] || styles.Personal;
 }
 function seedData() {
-  const monday = startOfWeek(new Date());
   return {
-    tasks: [
-      ["HDI email", "Work", 0, 10, true],
-      ["Order contact lenses", "Personal", 0, 5, false],
-      ["Roland onboarding sessions", "Work", 1, 20, false],
-      ["Call my GP", "Health", 1, 20, false],
-      ["Organise Hartford call", "Work", 2, 10, false],
-      ["Send QBE DocuSign", "Work", 3, 10, false],
-      ["Find styles for holiday / summer", "Personal", 4, 10, false],
-      ["Find bridge for water pipe", "Home", 5, 10, false],
-      ["Submit PSA application", "Personal", 6, 20, false],
-    ].map(([name, category, day, points, done], i) => ({
-      id: `task-${i + 1}`,
-      name,
-      category,
-      date: isoDate(addDays(monday, day)),
-      points,
-      done,
-      important: name === "Call my GP" || name === "Send QBE DocuSign",
-    })),
-    habits: [
-      { id: "sleep", name: "7+ hours sleep", detail: "Daily goal", points: 5, mode: "daily", ticks: { [isoDate(monday)]: true } },
-      { id: "dogs", name: "Walk the dogs", detail: "Every day", points: 5, mode: "daily", ticks: { [isoDate(monday)]: true } },
-      { id: "clothes", name: "Clean clothes put away", detail: "When laundry is done", points: 5, mode: "optional", ticks: {} },
-      { id: "office", name: "Go into the office", detail: "Once each week", points: 15, mode: "weekly", ticks: {} },
-    ],
+    tasks: [],
+    habits: [],
+    categories: DEFAULT_CATEGORIES,
+  };
+}
+function normalizeData(raw) {
+  const fallback = seedData();
+  if (!raw || typeof raw !== "object") return fallback;
+  const tasks = Array.isArray(raw.tasks)
+    ? raw.tasks.filter((task) => !LEGACY_SAMPLE_TASK_NAMES.has(task.name))
+    : [];
+  const habits = Array.isArray(raw.habits)
+    ? raw.habits.filter((habit) => !LEGACY_SAMPLE_HABIT_IDS.has(habit.id) && !LEGACY_SAMPLE_HABIT_NAMES.has(habit.name))
+    : [];
+  const taskCategories = tasks.map((task) => task.category).filter(Boolean);
+  const rawCategories = Array.isArray(raw.categories) ? raw.categories : taskCategories;
+  const categories = rawCategories.filter((category) => !LEGACY_DEFAULT_CATEGORIES.has(category));
+  return {
+    tasks,
+    habits,
+    categories: [...new Set(categories)].sort((a, b) => a.localeCompare(b)),
   };
 }
 function loadData() {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) return JSON.parse(saved);
+    if (saved) return normalizeData(JSON.parse(saved));
     const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
     if (legacy) {
       localStorage.setItem(STORAGE_KEY, legacy);
-      return JSON.parse(legacy);
+      return normalizeData(JSON.parse(legacy));
     }
     return seedData();
   } catch {
@@ -253,36 +267,29 @@ function TaskRow({ task, onToggle, onRemove, onEdit, onReframe, onMoveTomorrow, 
   );
 }
 
-function Header({ activeWeek, setActiveWeek, onAdd, points }) {
+function Header({ activeWeek, setActiveWeek, onAdd, onProfile, points }) {
   return (
-    <header className="bg-[#112849] px-5 pb-6 pt-[max(1.25rem,env(safe-area-inset-top))] text-white sm:px-8">
-      <div className="mx-auto flex max-w-7xl items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3">
-            <div className="grid h-11 w-11 place-items-center rounded-2xl bg-white text-xl font-extrabold text-[#112849]">A</div>
-            <div>
-              <h1 className="text-[23px] font-bold tracking-tight">ADHDeeds</h1>
-              <p className="text-xs text-blue-100/70">Your week, made visible.</p>
-            </div>
+    <header className="bg-[#112849] px-4 py-3 text-white sm:px-8">
+      <div className="mx-auto flex max-w-none flex-wrap items-center justify-between gap-3 2xl:max-w-[1800px]">
+        <div className="flex items-center gap-3">
+          <div className="grid h-10 w-10 place-items-center rounded-xl bg-white text-lg font-extrabold text-[#112849]">A</div>
+          <h1 className="text-[22px] font-bold tracking-tight">ADHDeeds</h1>
+        </div>
+        <div className="order-3 flex w-full items-center justify-between rounded-xl bg-white/10 p-1 sm:order-none sm:w-[280px]">
+          <button onClick={() => setActiveWeek(addDays(activeWeek, -7))} className="grid h-9 w-9 place-items-center rounded-lg text-blue-100 hover:bg-white/10"><ChevronLeft size={20} /></button>
+          <div className="text-center">
+            <div className="text-[10px] uppercase tracking-widest text-blue-200/70">Week of</div>
+            <div className="text-sm font-semibold">{pretty(activeWeek, { day: "numeric", month: "long" })}</div>
           </div>
+          <button onClick={() => setActiveWeek(addDays(activeWeek, 7))} className="grid h-9 w-9 place-items-center rounded-lg text-blue-100 hover:bg-white/10"><ChevronRight size={20} /></button>
         </div>
-        <button onClick={onAdd} className="grid h-11 w-11 place-items-center rounded-xl bg-[#3577DE] shadow-lg shadow-blue-950/20 transition active:scale-95 sm:hidden">
-          <Plus size={22} />
-        </button>
-        <div className="hidden items-center gap-3 sm:flex">
-          <div className="rounded-full border border-white/15 px-4 py-2 text-sm"><strong>{points}</strong> points</div>
-          <button onClick={onAdd} className="flex items-center gap-2 rounded-xl bg-[#3577DE] px-4 py-3 text-sm font-semibold hover:bg-blue-500">
-            <Plus size={17} /> Add task
+        <div className="flex items-center gap-2">
+          <div className="hidden rounded-full border border-white/15 px-3 py-2 text-sm sm:block"><strong>{points}</strong> points</div>
+          <button onClick={onAdd} className="flex h-10 items-center gap-2 rounded-xl bg-[#3577DE] px-3 text-sm font-semibold shadow-lg shadow-blue-950/20 hover:bg-blue-500">
+            <Plus size={17} /> <span className="hidden sm:inline">Add task</span>
           </button>
+          <button onClick={onProfile} className="h-10 rounded-xl bg-white/10 px-3 text-sm font-semibold hover:bg-white/15">Profile</button>
         </div>
-      </div>
-      <div className="mx-auto mt-6 flex max-w-7xl items-center justify-between rounded-2xl bg-white/10 p-1.5 sm:max-w-sm">
-        <button onClick={() => setActiveWeek(addDays(activeWeek, -7))} className="grid h-10 w-10 place-items-center rounded-xl text-blue-100 hover:bg-white/10"><ChevronLeft /></button>
-        <div className="text-center">
-          <div className="text-[11px] uppercase tracking-widest text-blue-200/70">Week of</div>
-          <div className="text-sm font-semibold">{pretty(activeWeek, { day: "numeric", month: "long" })}</div>
-        </div>
-        <button onClick={() => setActiveWeek(addDays(activeWeek, 7))} className="grid h-10 w-10 place-items-center rounded-xl text-blue-100 hover:bg-white/10"><ChevronRight /></button>
       </div>
     </header>
   );
@@ -348,6 +355,55 @@ function AuthPanel({ session, authLoading, syncStatus, onGoogleSignIn, onSignIn,
       </button>
       {message && <p className="mt-2 text-xs text-rose-600">{message}</p>}
     </form>
+  );
+}
+
+function ProfileSheet({ open, onClose, session, authLoading, syncStatus, onGoogleSignIn, onSignIn, onSignOut }) {
+  return (
+    <AnimatePresence>
+      {open && (
+        <>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="fixed inset-0 z-40 bg-slate-950/40" />
+          <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} transition={{ type: "spring", damping: 27, stiffness: 280 }} className="fixed inset-x-0 bottom-0 z-50 rounded-t-[28px] bg-[#F3F6FB] px-5 pb-[max(1.4rem,env(safe-area-inset-bottom))] pt-4 shadow-2xl sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-[520px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-3xl sm:p-6">
+            <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-slate-200 sm:hidden" />
+            <div className="mb-5 flex items-center justify-between">
+              <h2 className="text-xl font-bold tracking-tight text-[#112849]">Profile</h2>
+              <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-white text-slate-500"><X size={18}/></button>
+            </div>
+            <AuthPanel session={session} authLoading={authLoading} syncStatus={syncStatus} onGoogleSignIn={onGoogleSignIn} onSignIn={onSignIn} onSignOut={onSignOut} />
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+}
+
+function WelcomePage({ session, authLoading, syncStatus, onGoogleSignIn, onSignIn, onSignOut }) {
+  return (
+    <div className="min-h-screen bg-[#F3F6FB] px-4 py-8 text-slate-900 sm:px-8">
+      <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-5xl flex-col justify-center">
+        <div className="grid gap-8 lg:grid-cols-[1fr_430px] lg:items-center">
+          <div>
+            <div className="flex items-center gap-3">
+              <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#112849] text-xl font-extrabold text-white">A</div>
+              <div>
+                <h1 className="text-3xl font-bold tracking-tight text-[#112849]">ADHDeeds</h1>
+                <p className="mt-1 text-sm text-slate-500">Plan your week, move what changes, and keep the next step visible.</p>
+              </div>
+            </div>
+            <div className="mt-8 grid gap-3 sm:grid-cols-3">
+              {["Tasks", "Habits", "Week"].map((item) => (
+                <div key={item} className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200/70">
+                  <div className="text-sm font-bold text-[#112849]">{item}</div>
+                  <div className="mt-1 text-xs leading-5 text-slate-400">Synced and ready when you sign in.</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <AuthPanel session={session} authLoading={authLoading} syncStatus={syncStatus} onGoogleSignIn={onGoogleSignIn} onSignIn={onSignIn} onSignOut={onSignOut} />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -637,7 +693,7 @@ function HabitsView({ days, habits, onToggle, onAdd, onEdit, onRemove }) {
   );
 }
 
-function AllTasksView({ tasks, onToggle, onRemove, onAdd, onEdit, onReframe, onMoveTomorrow, onMoveTomorrowPenalty }) {
+function AllTasksView({ tasks, categories, onAddCategory, onToggle, onRemove, onAdd, onEdit, onReframe, onMoveTomorrow, onMoveTomorrowPenalty }) {
   const [filter, setFilter] = useState("All");
   const visible = filter === "All" ? tasks : tasks.filter((task) => task.category === filter);
   const sortedTasks = [...visible].sort((a, b) => a.date.localeCompare(b.date));
@@ -648,8 +704,11 @@ function AllTasksView({ tasks, onToggle, onRemove, onAdd, onEdit, onReframe, onM
         <div><h2 className="text-2xl font-bold tracking-tight text-[#112849]">Tasks</h2><p className="mt-1 text-sm text-slate-500">Everything on your board.</p></div>
         <button onClick={onAdd} className="hidden items-center gap-1 rounded-xl bg-[#3577DE] px-3 py-2 text-sm font-semibold text-white sm:flex"><Plus size={16}/> Add</button>
       </div>
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {["All", ...CATEGORIES].map((cat) => <button key={cat} onClick={() => setFilter(cat)} className={`whitespace-nowrap rounded-full px-4 py-2 text-xs font-semibold transition ${filter === cat ? "bg-[#112849] text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>{cat}</button>)}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+        <span className="shrink-0 text-xs font-semibold uppercase tracking-[.12em] text-slate-400">Categories</span>
+        <button onClick={() => setFilter("All")} className={`whitespace-nowrap rounded-full px-4 py-2 text-xs font-semibold transition ${filter === "All" ? "bg-[#112849] text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>All</button>
+        {categories.map((cat) => <button key={cat} onClick={() => setFilter(cat)} className={`whitespace-nowrap rounded-full px-4 py-2 text-xs font-semibold transition ${filter === cat ? "bg-[#112849] text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>{cat}</button>)}
+        <button onClick={onAddCategory} className="flex shrink-0 items-center gap-1 rounded-full bg-blue-50 px-4 py-2 text-xs font-semibold text-[#3577DE] ring-1 ring-blue-100"><Plus size={14} /> Add Category</button>
       </div>
       <div className="overflow-hidden rounded-2xl bg-white p-2 shadow-sm ring-1 ring-slate-200/70">
         {sortedTasks.map((task) => (
@@ -664,9 +723,9 @@ function AllTasksView({ tasks, onToggle, onRemove, onAdd, onEdit, onReframe, onM
   );
 }
 
-function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task }) {
+function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, categories, onAddCategory }) {
   const [name, setName] = useState("");
-  const [category, setCategory] = useState("Work");
+  const [category, setCategory] = useState(categories[0] || "");
   const [date, setDate] = useState(isoDate(days[0]));
   const [points, setPoints] = useState(10);
   const [important, setImportant] = useState(false);
@@ -674,12 +733,15 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task }) {
   useEffect(() => {
     if (!open) return;
     setName(task?.name || "");
-    setCategory(task?.category || "Work");
+    setCategory(task?.category || categories[0] || "");
     setDate(task?.date || isoDate(days[0]));
     setPoints(task?.points || 10);
     setImportant(!!task?.important);
     setBreakdown([]);
   }, [open, days, task]);
+  useEffect(() => {
+    if (open && !category && categories.length) setCategory(categories[0]);
+  }, [open, category, categories]);
   function submit(event) {
     event.preventDefault();
     if (!name.trim()) return;
@@ -688,7 +750,7 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task }) {
     } else {
       onSave({ id: `task-${Date.now()}`, name: name.trim(), category, date, points, done: false, important });
     }
-    setName(""); setCategory("Work"); setPoints(10); setImportant(false); onClose();
+    setName(""); setCategory(categories[0] || ""); setPoints(10); setImportant(false); onClose();
   }
   function createBreakdown() {
     if (!name.trim()) return;
@@ -719,12 +781,13 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task }) {
                 </div>
               )}
               <div className="grid grid-cols-2 gap-3">
-                <label><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Category</span><select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none">{CATEGORIES.map((item) => <option key={item}>{item}</option>)}</select></label>
+                <label><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Category</span><select value={category} onChange={(e) => setCategory(e.target.value)} disabled={!categories.length} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none disabled:bg-slate-50 disabled:text-slate-400">{categories.length ? categories.map((item) => <option key={item}>{item}</option>) : <option>Create a category first</option>}</select></label>
                 <label><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Day</span><select value={date} onChange={(e) => setDate(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none">{days.map((day) => <option key={isoDate(day)} value={isoDate(day)}>{pretty(day, { weekday: "short", day: "numeric", month: "short" })}</option>)}</select></label>
               </div>
+              {!categories.length && <button type="button" onClick={onAddCategory} className="w-full rounded-xl bg-blue-50 py-3 text-sm font-semibold text-[#3577DE] ring-1 ring-blue-100">Add Category</button>}
               <div className="grid grid-cols-3 gap-2">{POINT_OPTIONS.map((option) => <button type="button" key={option.value} onClick={() => setPoints(option.value)} className={`rounded-xl border px-2 py-3 text-center ${points === option.value ? "border-[#3577DE] bg-blue-50 text-[#112849]" : "border-slate-200 text-slate-500"}`}><span className="block text-xs font-semibold">{option.label}</span><span className="mt-1 block text-[11px]">{option.value} pts</span></button>)}</div>
               <button type="button" onClick={() => setImportant(!important)} className="flex w-full items-center gap-3 rounded-xl bg-slate-50 p-3 text-left"><span className={`grid h-5 w-5 place-items-center rounded-md border ${important ? "border-[#3577DE] bg-[#3577DE] text-white" : "border-slate-300 text-transparent"}`}><Check size={13} /></span><span className="text-sm text-slate-700">Mark as important</span></button>
-              <button type="submit" className="w-full rounded-xl bg-[#3577DE] py-3.5 text-sm font-semibold text-white">{task ? "Save changes" : "Add task"}</button>
+              <button type="submit" disabled={!category} className="w-full rounded-xl bg-[#3577DE] py-3.5 text-sm font-semibold text-white disabled:bg-slate-300">{task ? "Save changes" : "Add task"}</button>
             </div>
           </motion.form>
         </>
@@ -780,6 +843,37 @@ function HabitSheet({ open, onClose, onSave, onUpdate, habit }) {
               </div>
               <button type="submit" className="w-full rounded-xl bg-[#3577DE] py-3.5 text-sm font-semibold text-white">{habit ? "Save changes" : "Add habit"}</button>
             </div>
+          </motion.form>
+        </>
+      )}
+    </AnimatePresence>
+  );
+}
+
+function CategorySheet({ open, onClose, onSave }) {
+  const [name, setName] = useState("");
+
+  useEffect(() => {
+    if (open) setName("");
+  }, [open]);
+
+  function submit(event) {
+    event.preventDefault();
+    if (!name.trim()) return;
+    onSave(name.trim());
+    onClose();
+  }
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="fixed inset-0 z-40 bg-slate-950/40" />
+          <motion.form onSubmit={submit} initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} transition={{ type: "spring", damping: 27, stiffness: 280 }} className="fixed inset-x-0 bottom-0 z-50 rounded-t-[28px] bg-white px-5 pb-[max(1.4rem,env(safe-area-inset-bottom))] pt-4 shadow-2xl sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-[420px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-3xl sm:p-6">
+            <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-slate-200 sm:hidden" />
+            <div className="mb-5 flex items-center justify-between"><h2 className="text-xl font-bold tracking-tight text-[#112849]">Add Category</h2><button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-slate-100 text-slate-500"><X size={18}/></button></div>
+            <label className="block"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Category name</span><input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Work, Health, Admin" className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#3577DE]" /></label>
+            <button type="submit" className="mt-4 w-full rounded-xl bg-[#3577DE] py-3.5 text-sm font-semibold text-white">Add Category</button>
           </motion.form>
         </>
       )}
@@ -853,6 +947,8 @@ export default function ADHDeedsApp() {
   const [editingHabit, setEditingHabit] = useState(null);
   const [aiInsight, setAiInsight] = useState(null);
   const [rescheduleAdvice, setRescheduleAdvice] = useState("");
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [categorySheetOpen, setCategorySheetOpen] = useState(false);
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(isSupabaseConfigured);
   const [cloudReady, setCloudReady] = useState(!isSupabaseConfigured);
@@ -893,7 +989,7 @@ export default function ADHDeedsApp() {
         return;
       }
       if (remoteData?.tasks && remoteData?.habits) {
-        setData(remoteData);
+        setData(normalizeData(remoteData));
         localStorage.setItem(STORAGE_KEY, JSON.stringify(remoteData));
         setSyncStatus("Synced");
       } else {
@@ -929,7 +1025,8 @@ export default function ADHDeedsApp() {
   const points = taskPoints + habitPoints;
   const todayTasks = weekTasks.filter((task) => task.date === isoDate(today));
   const todayProgress = todayTasks.length ? Math.round((todayTasks.filter((task) => task.done).length / todayTasks.length) * 100) : 0;
-  const categoryNudges = CATEGORIES.map((category) => {
+  const categories = data.categories || [];
+  const categoryNudges = categories.map((category) => {
     const task = [...weekTasks]
       .filter((item) => item.category === category && !item.done)
       .sort((a, b) => Number(b.important) - Number(a.important) || b.points - a.points)[0];
@@ -997,6 +1094,13 @@ export default function ADHDeedsApp() {
   function removeHabit(id) {
     setData((old) => ({ ...old, habits: old.habits.filter((habit) => habit.id !== id) }));
   }
+  function addCategory(name) {
+    setData((old) => {
+      const existing = old.categories || [];
+      if (existing.some((category) => category.toLowerCase() === name.toLowerCase())) return old;
+      return { ...old, categories: [...existing, name].sort((a, b) => a.localeCompare(b)) };
+    });
+  }
   function openReframeTask(task) {
     setAiInsight({
       task,
@@ -1039,13 +1143,23 @@ export default function ADHDeedsApp() {
     setSyncStatus("Not signed in");
   }
 
+  if (authLoading || !session) {
+    return (
+      <WelcomePage
+        session={session}
+        authLoading={authLoading}
+        syncStatus={syncStatus}
+        onGoogleSignIn={signInWithGoogle}
+        onSignIn={signIn}
+        onSignOut={signOut}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#F3F6FB] font-sans text-slate-900">
-      <Header activeWeek={activeWeek} setActiveWeek={setActiveWeek} onAdd={openAddTask} points={points} />
+      <Header activeWeek={activeWeek} setActiveWeek={setActiveWeek} onAdd={openAddTask} onProfile={() => setProfileOpen(true)} points={points} />
       <main className={`mx-auto px-4 py-5 sm:px-8 sm:py-7 ${view === "week" ? "max-w-none 2xl:max-w-[1800px]" : "max-w-7xl"}`}>
-        <div className="pb-5">
-          <AuthPanel session={session} authLoading={authLoading} syncStatus={syncStatus} onGoogleSignIn={signInWithGoogle} onSignIn={signIn} onSignOut={signOut} />
-        </div>
         <div className="hidden gap-2 pb-6 sm:flex">
           {[{id:"today",label:"Today"},{id:"week",label:"Week"},{id:"habits",label:"Habits"},{id:"tasks",label:"All tasks"}].map((tab) => (
             <button key={tab.id} onClick={() => setView(tab.id)} className={`rounded-full px-5 py-2.5 text-sm font-semibold ${view === tab.id ? "bg-[#112849] text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>{tab.label}</button>
@@ -1054,11 +1168,13 @@ export default function ADHDeedsApp() {
         {view === "today" && <TodayView today={today} tasks={weekTasks} habits={data.habits} onToggleTask={toggleTask} onToggleHabit={toggleHabit} onEditTask={openEditTask} onReframeTask={openReframeTask} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} nudges={categoryNudges} points={points} progress={todayProgress} />}
         {view === "week" && <WeekView days={days} tasks={weekTasks} onToggle={toggleTask} onEdit={openEditTask} onReframe={openReframeTask} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} onMoveTask={moveTask} today={today} points={points} taskPoints={taskPoints} habitPoints={habitPoints} nudges={categoryNudges} />}
         {view === "habits" && <HabitsView days={days} habits={data.habits} onToggle={toggleHabit} onAdd={openAddHabit} onEdit={openEditHabit} onRemove={removeHabit} />}
-        {view === "tasks" && <AllTasksView tasks={weekTasks} onToggle={toggleTask} onRemove={removeTask} onAdd={openAddTask} onEdit={openEditTask} onReframe={openReframeTask} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} />}
+        {view === "tasks" && <AllTasksView tasks={weekTasks} categories={categories} onAddCategory={() => setCategorySheetOpen(true)} onToggle={toggleTask} onRemove={removeTask} onAdd={openAddTask} onEdit={openEditTask} onReframe={openReframeTask} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} />}
       </main>
       <BottomNav view={view} setView={setView} onAdd={openAddTask} />
-      <AddTaskSheet open={sheetOpen} onClose={closeSheet} onSave={addTask} onUpdate={updateTask} days={days} task={editingTask} />
+      <AddTaskSheet open={sheetOpen} onClose={closeSheet} onSave={addTask} onUpdate={updateTask} days={days} task={editingTask} categories={categories} onAddCategory={() => setCategorySheetOpen(true)} />
       <HabitSheet open={habitSheetOpen} onClose={closeHabitSheet} onSave={addHabit} onUpdate={updateHabit} habit={editingHabit} />
+      <CategorySheet open={categorySheetOpen} onClose={() => setCategorySheetOpen(false)} onSave={addCategory} />
+      <ProfileSheet open={profileOpen} onClose={() => setProfileOpen(false)} session={session} authLoading={authLoading} syncStatus={syncStatus} onGoogleSignIn={signInWithGoogle} onSignIn={signIn} onSignOut={signOut} />
       <AISheet insight={aiInsight} onClose={() => setAiInsight(null)} onAddFirstStep={addFirstStepTask} />
       <AIToast message={rescheduleAdvice} onClose={() => setRescheduleAdvice("")} />
     </div>
