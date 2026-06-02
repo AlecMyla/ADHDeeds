@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   BarChart3,
+  Bell,
   CalendarDays,
   Check,
   ChevronLeft,
@@ -34,6 +35,8 @@ import { askAI } from "./aiClient";
 const BLUE = "#3577DE";
 const LEGACY_STORAGE_KEY = "adhdiary_mobile_app_v1";
 const STORAGE_KEY = "adhdeeds_mobile_app_v1";
+const NOTIFICATIONS_KEY = "adhdeeds_notifications_enabled_v1";
+const NOTIFIED_DATE_KEY = "adhdeeds_notified_date_v1";
 
 const DEFAULT_CATEGORIES = [];
 const LEGACY_SAMPLE_TASK_NAMES = new Set([
@@ -66,6 +69,12 @@ const HABIT_MODES = [
   { label: "Optional", value: "optional" },
   { label: "Weekly", value: "weekly" },
 ];
+const RECURRENCE_OPTIONS = [
+  { label: "Does not repeat", value: "none" },
+  { label: "Daily", value: "daily" },
+  { label: "Weekly", value: "weekly" },
+  { label: "Monthly", value: "monthly" },
+];
 
 function startOfWeek(date = new Date()) {
   const copy = new Date(date);
@@ -90,6 +99,34 @@ function pretty(date, options = { day: "numeric", month: "short" }) {
 function weekDays(weekStart) {
   return Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
 }
+function daysBetween(startDate, targetDate) {
+  const start = new Date(`${startDate}T00:00:00`);
+  const target = new Date(`${targetDate}T00:00:00`);
+  return Math.round((target - start) / 86400000);
+}
+function recurrenceMatches(template, dateKey) {
+  if (dateKey < template.startDate) return false;
+  if (template.skippedDates?.includes(dateKey)) return false;
+  const gap = daysBetween(template.startDate, dateKey);
+  if (template.frequency === "daily") return gap >= 0;
+  if (template.frequency === "weekly") return gap >= 0 && gap % 7 === 0;
+  if (template.frequency === "monthly") {
+    return new Date(`${template.startDate}T00:00:00`).getDate() === new Date(`${dateKey}T00:00:00`).getDate();
+  }
+  return false;
+}
+function taskFromRecurring(template, dateKey) {
+  return {
+    id: `task-${template.id}-${dateKey}`,
+    recurringId: template.id,
+    name: template.name,
+    category: template.category,
+    date: dateKey,
+    points: template.points,
+    done: false,
+    important: template.important,
+  };
+}
 function categoryStyle(category) {
   const styles = {
     Work: "bg-blue-50 text-blue-700",
@@ -106,6 +143,7 @@ function seedData() {
     tasks: [],
     habits: [],
     categories: DEFAULT_CATEGORIES,
+    recurringTasks: [],
   };
 }
 function normalizeData(raw) {
@@ -119,13 +157,18 @@ function normalizeData(raw) {
     : [];
   const taskCategories = tasks.map((task) => task.category).filter(Boolean);
   const rawCategories = Array.isArray(raw.categories) ? raw.categories : [];
-  const categories = [...rawCategories, ...taskCategories]
+  const recurringTasks = Array.isArray(raw.recurringTasks)
+    ? raw.recurringTasks.filter((item) => item?.id && item?.frequency && item?.startDate)
+    : [];
+  const recurringCategories = recurringTasks.map((task) => task.category).filter(Boolean);
+  const categories = [...rawCategories, ...taskCategories, ...recurringCategories]
     .map((category) => String(category).trim())
     .filter(Boolean)
     .filter((category) => rawCategories.includes(category) || !LEGACY_DEFAULT_CATEGORIES.has(category) || taskCategories.includes(category));
   return {
     tasks,
     habits,
+    recurringTasks,
     categories: [...new Set(categories)].sort((a, b) => a.localeCompare(b)),
   };
 }
@@ -244,6 +287,7 @@ function TaskRow({ task, onToggle, onRemove, onEdit, onReframe, onMoveTomorrow, 
         <div className="mt-1 flex flex-wrap items-center gap-1.5">
           <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${categoryStyle(task.category)}`}>{task.category}</span>
           <span className="text-[11px] font-medium text-slate-400">{task.points} pts</span>
+          {task.recurringId && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">Repeats</span>}
           {task.important && !task.done && <span className="rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-semibold text-orange-700">Important</span>}
         </div>
       </div>
@@ -365,7 +409,7 @@ function AuthPanel({ session, authLoading, syncStatus, onGoogleSignIn, onSignIn,
   );
 }
 
-function ProfileSheet({ open, onClose, session, authLoading, syncStatus, onGoogleSignIn, onSignIn, onSignOut }) {
+function ProfileSheet({ open, onClose, session, authLoading, syncStatus, notificationsEnabled, notificationSupported, onEnableNotifications, onGoogleSignIn, onSignIn, onSignOut }) {
   return (
     <AnimatePresence>
       {open && (
@@ -378,6 +422,23 @@ function ProfileSheet({ open, onClose, session, authLoading, syncStatus, onGoogl
               <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-white text-slate-500"><X size={18}/></button>
             </div>
             <AuthPanel session={session} authLoading={authLoading} syncStatus={syncStatus} onGoogleSignIn={onGoogleSignIn} onSignIn={onSignIn} onSignOut={onSignOut} />
+            <div className="mt-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200/70">
+              <div className="flex items-start gap-3">
+                <Bell size={18} className="mt-0.5 text-[#3577DE]" />
+                <div className="flex-1">
+                  <div className="text-sm font-bold text-[#112849]">Browser notifications</div>
+                  <p className="mt-1 text-xs leading-5 text-slate-400">Get a once-a-day reminder for today’s open tasks while ADHDeeds is open.</p>
+                  <button
+                    type="button"
+                    onClick={onEnableNotifications}
+                    disabled={!notificationSupported || notificationsEnabled}
+                    className="mt-3 rounded-xl bg-blue-50 px-3 py-2 text-xs font-semibold text-[#3577DE] ring-1 ring-blue-100 disabled:bg-slate-100 disabled:text-slate-400 disabled:ring-slate-200"
+                  >
+                    {!notificationSupported ? "Not supported here" : notificationsEnabled ? "Notifications on" : "Enable notifications"}
+                  </button>
+                </div>
+              </div>
+            </div>
           </motion.div>
         </>
       )}
@@ -876,6 +937,7 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
   const [date, setDate] = useState(isoDate(days[0]));
   const [points, setPoints] = useState(10);
   const [important, setImportant] = useState(false);
+  const [recurrence, setRecurrence] = useState("none");
   const [breakdown, setBreakdown] = useState([]);
   useEffect(() => {
     if (!open) return;
@@ -884,6 +946,7 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
     setDate(task?.date || initialDate || isoDate(days[0]));
     setPoints(task?.points || 10);
     setImportant(!!task?.important);
+    setRecurrence("none");
     setBreakdown([]);
   }, [open, days, task, initialDate, categories]);
   useEffect(() => {
@@ -895,9 +958,9 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
     if (task) {
       onUpdate({ ...task, name: name.trim(), category, date, points, important });
     } else {
-      onSave({ id: `task-${Date.now()}`, name: name.trim(), category, date, points, done: false, important });
+      onSave({ id: `task-${Date.now()}`, name: name.trim(), category, date, points, done: false, important, recurrence });
     }
-    setName(""); setCategory(categories[0] || ""); setPoints(10); setImportant(false); onClose();
+    setName(""); setCategory(categories[0] || ""); setPoints(10); setImportant(false); setRecurrence("none"); onClose();
   }
   function createBreakdown() {
     if (!name.trim()) return;
@@ -931,6 +994,14 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
                 <label><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Category</span><select value={category} onChange={(e) => setCategory(e.target.value)} disabled={!categories.length} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none disabled:bg-slate-50 disabled:text-slate-400">{categories.length ? categories.map((item) => <option key={item}>{item}</option>) : <option>Create a category first</option>}</select></label>
                 <label><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Day</span><select value={date} onChange={(e) => setDate(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none">{days.map((day) => <option key={isoDate(day)} value={isoDate(day)}>{pretty(day, { weekday: "short", day: "numeric", month: "short" })}</option>)}</select></label>
               </div>
+              {!task && (
+                <label className="block">
+                  <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Repeat</span>
+                  <select value={recurrence} onChange={(event) => setRecurrence(event.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none">
+                    {RECURRENCE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                </label>
+              )}
               {!categories.length && <button type="button" onClick={onAddCategory} className="w-full rounded-xl bg-blue-50 py-3 text-sm font-semibold text-[#3577DE] ring-1 ring-blue-100">Add Category</button>}
               <div className="grid grid-cols-3 gap-2">{POINT_OPTIONS.map((option) => <button type="button" key={option.value} onClick={() => setPoints(option.value)} className={`rounded-xl border px-2 py-3 text-center ${points === option.value ? "border-[#3577DE] bg-blue-50 text-[#112849]" : "border-slate-200 text-slate-500"}`}><span className="block text-xs font-semibold">{option.label}</span><span className="mt-1 block text-[11px]">{option.value} pts</span></button>)}</div>
               <button type="button" onClick={() => setImportant(!important)} className="flex w-full items-center gap-3 rounded-xl bg-slate-50 p-3 text-left"><span className={`grid h-5 w-5 place-items-center rounded-md border ${important ? "border-[#3577DE] bg-[#3577DE] text-white" : "border-slate-300 text-transparent"}`}><Check size={13} /></span><span className="text-sm text-slate-700">Mark as important</span></button>
@@ -1097,6 +1168,7 @@ export default function ADHDeedsApp() {
   const [rescheduleAdvice, setRescheduleAdvice] = useState("");
   const [profileOpen, setProfileOpen] = useState(false);
   const [categorySheetOpen, setCategorySheetOpen] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(() => localStorage.getItem(NOTIFICATIONS_KEY) === "true");
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(isSupabaseConfigured);
   const [cloudReady, setCloudReady] = useState(!isSupabaseConfigured);
@@ -1105,6 +1177,7 @@ export default function ADHDeedsApp() {
   const today = new Date();
   const days = useMemo(() => weekDays(activeWeek), [activeWeek]);
   const weekTasks = useMemo(() => data.tasks.filter((task) => task.date >= isoDate(days[0]) && task.date <= isoDate(days[6])), [data.tasks, days]);
+  const notificationSupported = typeof window !== "undefined" && "Notification" in window;
 
   useEffect(() => {
     if (!isSupabaseConfigured) return;
@@ -1126,6 +1199,10 @@ export default function ADHDeedsApp() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   }, [data]);
+
+  useEffect(() => {
+    localStorage.setItem(NOTIFICATIONS_KEY, notificationsEnabled ? "true" : "false");
+  }, [notificationsEnabled]);
 
   useEffect(() => {
     if (!isSupabaseConfigured || !session) return;
@@ -1173,6 +1250,34 @@ export default function ADHDeedsApp() {
     };
   }, [data, session?.user?.id, cloudReady]);
 
+  useEffect(() => {
+    const recurringTasks = data.recurringTasks || [];
+    if (!recurringTasks.length) return;
+    const dayKeys = days.map(isoDate);
+    const existingKeys = new Set(data.tasks.map((task) => `${task.recurringId || ""}:${task.date}`));
+    const generated = recurringTasks.flatMap((template) =>
+      dayKeys
+        .filter((dateKey) => recurrenceMatches(template, dateKey))
+        .filter((dateKey) => !existingKeys.has(`${template.id}:${dateKey}`))
+        .map((dateKey) => taskFromRecurring(template, dateKey))
+    );
+    if (!generated.length) return;
+    setData((old) => ({ ...old, tasks: [...old.tasks, ...generated] }));
+  }, [data.recurringTasks, data.tasks, days]);
+
+  useEffect(() => {
+    if (!notificationsEnabled || !notificationSupported || Notification.permission !== "granted") return;
+    const todayKey = isoDate(today);
+    if (localStorage.getItem(NOTIFIED_DATE_KEY) === todayKey) return;
+    const openToday = data.tasks.filter((task) => task.date === todayKey && !task.done);
+    if (!openToday.length) return;
+    new Notification("ADHDeeds", {
+      body: openToday.length === 1 ? `1 task due today: ${openToday[0].name}` : `${openToday.length} tasks due today.`,
+      tag: `adhdeeds-${todayKey}`,
+    });
+    localStorage.setItem(NOTIFIED_DATE_KEY, todayKey);
+  }, [notificationsEnabled, notificationSupported, data.tasks]);
+
   const completed = weekTasks.filter((task) => task.done);
   const taskPoints = completed.reduce((sum, task) => sum + task.points, 0);
   const habitPoints = data.habits.reduce((sum, habit) => sum + days.filter((day) => habit.ticks[isoDate(day)]).length * habit.points, 0);
@@ -1188,8 +1293,43 @@ export default function ADHDeedsApp() {
   }).filter(Boolean);
 
   function toggleTask(id) { setData((old) => ({ ...old, tasks: old.tasks.map((task) => task.id === id ? { ...task, done: !task.done } : task) })); }
-  function removeTask(id) { setData((old) => ({ ...old, tasks: old.tasks.filter((task) => task.id !== id) })); }
-  function addTask(task) { setData((old) => ({ ...old, tasks: [...old.tasks, task] })); }
+  function removeTask(id) {
+    setData((old) => {
+      const task = old.tasks.find((item) => item.id === id);
+      if (!task?.recurringId) return { ...old, tasks: old.tasks.filter((item) => item.id !== id) };
+      return {
+        ...old,
+        tasks: old.tasks.filter((item) => item.recurringId !== task.recurringId),
+        recurringTasks: (old.recurringTasks || []).filter((template) => template.id !== task.recurringId),
+      };
+    });
+  }
+  function addTask(task) {
+    if (task.recurrence && task.recurrence !== "none") {
+      const recurringId = `recurring-${Date.now()}`;
+      const { recurrence, ...taskFields } = task;
+      setData((old) => ({
+        ...old,
+        recurringTasks: [
+          ...(old.recurringTasks || []),
+          {
+            id: recurringId,
+            name: task.name,
+            category: task.category,
+            startDate: task.date,
+            frequency: recurrence,
+            points: task.points,
+            important: task.important,
+            skippedDates: [],
+          },
+        ],
+        tasks: [...old.tasks, { ...taskFields, recurringId }],
+      }));
+      return;
+    }
+    const { recurrence, ...taskFields } = task;
+    setData((old) => ({ ...old, tasks: [...old.tasks, taskFields] }));
+  }
   function updateTask(updatedTask) { setData((old) => ({ ...old, tasks: old.tasks.map((task) => task.id === updatedTask.id ? updatedTask : task) })); }
   function openAddTask(date = null) {
     setEditingTask(null);
@@ -1303,6 +1443,21 @@ export default function ADHDeedsApp() {
     });
     setAiInsight(null);
   }
+  async function enableNotifications() {
+    if (!notificationSupported) {
+      setRescheduleAdvice("This browser does not support in-browser notifications.");
+      return;
+    }
+    const permission = await Notification.requestPermission();
+    if (permission === "granted") {
+      setNotificationsEnabled(true);
+      localStorage.removeItem(NOTIFIED_DATE_KEY);
+      setRescheduleAdvice("Notifications are on. ADHDeeds will remind you about today’s open tasks while the app is open.");
+      return;
+    }
+    setNotificationsEnabled(false);
+    setRescheduleAdvice("Notifications were not enabled. You can allow them later in your browser settings.");
+  }
   async function signIn(email, password, mode) {
     if (!isSupabaseConfigured) return { error: new Error("Supabase is not configured.") };
     const result = mode === "signup"
@@ -1356,7 +1511,7 @@ export default function ADHDeedsApp() {
       <AddTaskSheet open={sheetOpen} onClose={closeSheet} onSave={addTask} onUpdate={updateTask} days={days} task={editingTask} initialDate={newTaskDate} categories={categories} onAddCategory={() => setCategorySheetOpen(true)} />
       <HabitSheet open={habitSheetOpen} onClose={closeHabitSheet} onSave={addHabit} onUpdate={updateHabit} habit={editingHabit} />
       <CategorySheet open={categorySheetOpen} onClose={() => setCategorySheetOpen(false)} onSave={addCategory} />
-      <ProfileSheet open={profileOpen} onClose={() => setProfileOpen(false)} session={session} authLoading={authLoading} syncStatus={syncStatus} onGoogleSignIn={signInWithGoogle} onSignIn={signIn} onSignOut={signOut} />
+      <ProfileSheet open={profileOpen} onClose={() => setProfileOpen(false)} session={session} authLoading={authLoading} syncStatus={syncStatus} notificationsEnabled={notificationsEnabled} notificationSupported={notificationSupported} onEnableNotifications={enableNotifications} onGoogleSignIn={signInWithGoogle} onSignIn={signIn} onSignOut={signOut} />
       <AISheet insight={aiInsight} onClose={() => setAiInsight(null)} onAddFirstStep={addFirstStepTask} />
       <AIToast message={rescheduleAdvice} onClose={() => setRescheduleAdvice("")} />
     </div>

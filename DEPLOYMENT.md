@@ -146,3 +146,7 @@ ADHDeeds stores all tasks and habits in one protected Supabase row per signed-in
 6. The task should still be there.
 
 Then open the same Vercel URL on another device and sign in with the same account. The same task data should load.
+
+## Browser Notifications
+
+ADHDeeds can request browser notification permission from the Profile panel. These reminders are local browser notifications and work while the app is open or active in the browser. True background reminders on mobile or desktop would need a later PWA/push-notification setup.
