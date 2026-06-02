@@ -272,7 +272,7 @@ function Logo({ size = "header" }) {
     return <img src="/adhdeeds-logo.png" alt="ADHDeeds" className="h-24 w-auto max-w-full object-contain" />;
   }
 
-  return <img src="/adhdeeds-logo.png" alt="ADHDeeds" className="h-12 w-auto max-w-[210px] object-contain sm:max-w-[260px]" />;
+  return <img src="/adhdeeds-header-logo.png" alt="ADHDeeds" className="h-12 w-auto max-w-[210px] object-contain sm:max-w-[260px]" />;
 }
 
 function TaskRow({ task, onToggle, onRemove, onEdit, onReframe, onMoveTomorrow, onMoveTomorrowPenalty, onDragStart, compact = false }) {
