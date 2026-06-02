@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CirclePlus,
+  ClipboardList,
   Flame,
   Home,
   Minus,
@@ -142,6 +143,7 @@ function seedData() {
   return {
     tasks: [],
     habits: [],
+    brainDump: [],
     categories: DEFAULT_CATEGORIES,
     recurringTasks: [],
   };
@@ -154,6 +156,13 @@ function normalizeData(raw) {
     : [];
   const habits = Array.isArray(raw.habits)
     ? raw.habits.filter((habit) => !LEGACY_SAMPLE_HABIT_IDS.has(habit.id) && !LEGACY_SAMPLE_HABIT_NAMES.has(habit.name))
+    : [];
+  const brainDump = Array.isArray(raw.brainDump)
+    ? raw.brainDump.filter((item) => item?.text).map((item) => ({
+      id: item.id || `dump-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      text: String(item.text).trim(),
+      createdAt: item.createdAt || new Date().toISOString(),
+    }))
     : [];
   const taskCategories = tasks.map((task) => task.category).filter(Boolean);
   const rawCategories = Array.isArray(raw.categories) ? raw.categories : [];
@@ -168,6 +177,7 @@ function normalizeData(raw) {
   return {
     tasks,
     habits,
+    brainDump,
     recurringTasks,
     categories: [...new Set(categories)].sort((a, b) => a.localeCompare(b)),
   };
@@ -901,6 +911,73 @@ function HabitsView({ days, habits, onToggle, onAdd, onEdit, onRemove }) {
   );
 }
 
+function BrainDumpsterView({ items, categories, onAddItems, onRemoveItem, onConvertItem, onAddCategory }) {
+  const [text, setText] = useState("");
+
+  function submit(event) {
+    event.preventDefault();
+    const lines = text.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+    if (!lines.length) return;
+    onAddItems(lines);
+    setText("");
+  }
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4 pb-24">
+      <div>
+        <h2 className="text-2xl font-bold tracking-tight text-[#112849]">Brain Dumpster</h2>
+        <p className="mt-1 text-sm text-slate-500">Catch loose thoughts first. Decide what they are later.</p>
+      </div>
+      <form onSubmit={submit} className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200/70">
+        <label className="block">
+          <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Dump it here</span>
+          <textarea
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            placeholder="One thought per line..."
+            rows={5}
+            className="w-full resize-none rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#3577DE]"
+          />
+        </label>
+        <button type="submit" className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-[#3577DE] py-3 text-sm font-semibold text-white">
+          <Plus size={16} /> Add to dumpster
+        </button>
+      </form>
+      <div className="rounded-2xl bg-white p-2 shadow-sm ring-1 ring-slate-200/70">
+        {items.map((item) => (
+          <div key={item.id} className="flex items-start gap-3 border-b border-slate-100 p-3 last:border-b-0">
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium leading-5 text-slate-800">{item.text}</div>
+              <div className="mt-1 text-[11px] text-slate-400">Captured {new Date(item.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</div>
+            </div>
+            <div className="flex shrink-0 items-center gap-1">
+              <button
+                onClick={() => onConvertItem(item)}
+                disabled={!categories.length}
+                className="rounded-lg bg-blue-50 px-3 py-2 text-xs font-semibold text-[#3577DE] ring-1 ring-blue-100 disabled:bg-slate-100 disabled:text-slate-400 disabled:ring-slate-200"
+              >
+                Make task
+              </button>
+              <button onClick={() => onRemoveItem(item.id)} className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-500" aria-label="Delete dumped item">
+                <Trash2 size={15} />
+              </button>
+            </div>
+          </div>
+        ))}
+        {!items.length && <div className="p-8 text-center text-sm text-slate-400">Nothing dumped yet.</div>}
+      </div>
+      {!categories.length && (
+        <div className="rounded-2xl bg-blue-50 p-4 text-sm text-[#112849] ring-1 ring-blue-100">
+          Create a category before turning dumped items into tasks.
+          <button onClick={onAddCategory} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-white py-3 text-sm font-semibold text-[#3577DE] ring-1 ring-blue-100">
+            <Plus size={16} /> Add Category
+          </button>
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
 function AllTasksView({ tasks, categories, onAddCategory, onToggle, onRemove, onAdd, onEdit, onReframe, onMoveTomorrow, onMoveTomorrowPenalty }) {
   const [filter, setFilter] = useState("All");
   const visible = filter === "All" ? tasks : tasks.filter((task) => task.category === filter);
@@ -931,7 +1008,7 @@ function AllTasksView({ tasks, categories, onAddCategory, onToggle, onRemove, on
   );
 }
 
-function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate, categories, onAddCategory }) {
+function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate, initialName = "", categories, onAddCategory }) {
   const [name, setName] = useState("");
   const [category, setCategory] = useState(categories[0] || "");
   const [date, setDate] = useState(isoDate(days[0]));
@@ -941,14 +1018,14 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
   const [breakdown, setBreakdown] = useState([]);
   useEffect(() => {
     if (!open) return;
-    setName(task?.name || "");
+    setName(task?.name || initialName);
     setCategory(task?.category || categories[0] || "");
     setDate(task?.date || initialDate || isoDate(days[0]));
     setPoints(task?.points || 10);
     setImportant(!!task?.important);
     setRecurrence("none");
     setBreakdown([]);
-  }, [open, days, task, initialDate, categories]);
+  }, [open, days, task, initialDate, initialName, categories]);
   useEffect(() => {
     if (open && !category && categories.length) setCategory(categories[0]);
   }, [open, category, categories]);
@@ -1140,6 +1217,7 @@ function BottomNav({ view, setView, onAdd }) {
   const tabs = [
     { id: "today", label: "Today", icon: Home },
     { id: "week", label: "Week", icon: CalendarDays },
+    { id: "dumpster", label: "Dump", icon: ClipboardList },
     { id: "add", label: "", icon: CirclePlus },
     { id: "habits", label: "Habits", icon: Flame },
     { id: "tasks", label: "Tasks", icon: BarChart3 },
@@ -1162,6 +1240,7 @@ export default function ADHDeedsApp() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [newTaskDate, setNewTaskDate] = useState(null);
+  const [brainTaskDraft, setBrainTaskDraft] = useState(null);
   const [habitSheetOpen, setHabitSheetOpen] = useState(false);
   const [editingHabit, setEditingHabit] = useState(null);
   const [aiInsight, setAiInsight] = useState(null);
@@ -1323,16 +1402,24 @@ export default function ADHDeedsApp() {
             skippedDates: [],
           },
         ],
+        brainDump: brainTaskDraft ? (old.brainDump || []).filter((item) => item.id !== brainTaskDraft.id) : (old.brainDump || []),
         tasks: [...old.tasks, { ...taskFields, recurringId }],
       }));
+      setBrainTaskDraft(null);
       return;
     }
     const { recurrence, ...taskFields } = task;
-    setData((old) => ({ ...old, tasks: [...old.tasks, taskFields] }));
+    setData((old) => ({
+      ...old,
+      brainDump: brainTaskDraft ? (old.brainDump || []).filter((item) => item.id !== brainTaskDraft.id) : (old.brainDump || []),
+      tasks: [...old.tasks, taskFields],
+    }));
+    setBrainTaskDraft(null);
   }
   function updateTask(updatedTask) { setData((old) => ({ ...old, tasks: old.tasks.map((task) => task.id === updatedTask.id ? updatedTask : task) })); }
   function openAddTask(date = null) {
     setEditingTask(null);
+    setBrainTaskDraft(null);
     setNewTaskDate(date);
     setSheetOpen(true);
   }
@@ -1345,6 +1432,29 @@ export default function ADHDeedsApp() {
     setSheetOpen(false);
     setEditingTask(null);
     setNewTaskDate(null);
+    setBrainTaskDraft(null);
+  }
+  function addBrainDumpItems(lines) {
+    setData((old) => ({
+      ...old,
+      brainDump: [
+        ...(old.brainDump || []),
+        ...lines.map((line, index) => ({
+          id: `dump-${Date.now()}-${index}`,
+          text: line,
+          createdAt: new Date().toISOString(),
+        })),
+      ],
+    }));
+  }
+  function removeBrainDumpItem(id) {
+    setData((old) => ({ ...old, brainDump: (old.brainDump || []).filter((item) => item.id !== id) }));
+  }
+  function convertBrainDumpItem(item) {
+    setEditingTask(null);
+    setBrainTaskDraft(item);
+    setNewTaskDate(isoDate(today));
+    setSheetOpen(true);
   }
   function moveTask(id, date, penalize = false) {
     if (!id || !date) return;
@@ -1498,17 +1608,18 @@ export default function ADHDeedsApp() {
       <Header activeWeek={activeWeek} setActiveWeek={setActiveWeek} onProfile={() => setProfileOpen(true)} points={points} />
       <main className={`mx-auto px-4 py-5 sm:px-8 sm:py-7 ${view === "week" ? "max-w-none 2xl:max-w-[1800px]" : "max-w-7xl"}`}>
         <div className="hidden gap-2 pb-6 sm:flex">
-          {[{id:"today",label:"Today"},{id:"week",label:"Week"},{id:"habits",label:"Habits"},{id:"tasks",label:"All tasks"}].map((tab) => (
+          {[{id:"today",label:"Today"},{id:"week",label:"Week"},{id:"dumpster",label:"Brain Dumpster"},{id:"habits",label:"Habits"},{id:"tasks",label:"All tasks"}].map((tab) => (
             <button key={tab.id} onClick={() => setView(tab.id)} className={`rounded-full px-5 py-2.5 text-sm font-semibold ${view === tab.id ? "bg-[#112849] text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>{tab.label}</button>
           ))}
         </div>
         {view === "today" && <TodayView today={today} tasks={weekTasks} habits={data.habits} aiAccessToken={session?.access_token} onToggleTask={toggleTask} onToggleHabit={toggleHabit} onEditTask={openEditTask} onAddTask={openAddTask} onReframeTask={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} nudges={categoryNudges} points={points} progress={todayProgress} />}
         {view === "week" && <WeekView days={days} tasks={weekTasks} onToggle={toggleTask} onEdit={openEditTask} onAddTask={openAddTask} onReframe={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} onMoveTask={moveTask} today={today} points={points} taskPoints={taskPoints} habitPoints={habitPoints} nudges={categoryNudges} />}
+        {view === "dumpster" && <BrainDumpsterView items={data.brainDump || []} categories={categories} onAddItems={addBrainDumpItems} onRemoveItem={removeBrainDumpItem} onConvertItem={convertBrainDumpItem} onAddCategory={() => setCategorySheetOpen(true)} />}
         {view === "habits" && <HabitsView days={days} habits={data.habits} onToggle={toggleHabit} onAdd={openAddHabit} onEdit={openEditHabit} onRemove={removeHabit} />}
         {view === "tasks" && <AllTasksView tasks={weekTasks} categories={categories} onAddCategory={() => setCategorySheetOpen(true)} onToggle={toggleTask} onRemove={removeTask} onAdd={openAddTask} onEdit={openEditTask} onReframe={openReframeTask} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} />}
       </main>
       <BottomNav view={view} setView={setView} onAdd={openAddTask} />
-      <AddTaskSheet open={sheetOpen} onClose={closeSheet} onSave={addTask} onUpdate={updateTask} days={days} task={editingTask} initialDate={newTaskDate} categories={categories} onAddCategory={() => setCategorySheetOpen(true)} />
+      <AddTaskSheet open={sheetOpen} onClose={closeSheet} onSave={addTask} onUpdate={updateTask} days={days} task={editingTask} initialDate={newTaskDate} initialName={brainTaskDraft?.text || ""} categories={categories} onAddCategory={() => setCategorySheetOpen(true)} />
       <HabitSheet open={habitSheetOpen} onClose={closeHabitSheet} onSave={addHabit} onUpdate={updateHabit} habit={editingHabit} />
       <CategorySheet open={categorySheetOpen} onClose={() => setCategorySheetOpen(false)} onSave={addCategory} />
       <ProfileSheet open={profileOpen} onClose={() => setProfileOpen(false)} session={session} authLoading={authLoading} syncStatus={syncStatus} notificationsEnabled={notificationsEnabled} notificationSupported={notificationSupported} onEnableNotifications={enableNotifications} onGoogleSignIn={signInWithGoogle} onSignIn={signIn} onSignOut={signOut} />
