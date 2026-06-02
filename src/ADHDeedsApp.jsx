@@ -118,8 +118,11 @@ function normalizeData(raw) {
     ? raw.habits.filter((habit) => !LEGACY_SAMPLE_HABIT_IDS.has(habit.id) && !LEGACY_SAMPLE_HABIT_NAMES.has(habit.name))
     : [];
   const taskCategories = tasks.map((task) => task.category).filter(Boolean);
-  const rawCategories = Array.isArray(raw.categories) ? raw.categories : taskCategories;
-  const categories = rawCategories.filter((category) => !LEGACY_DEFAULT_CATEGORIES.has(category));
+  const rawCategories = Array.isArray(raw.categories) ? raw.categories : [];
+  const categories = [...rawCategories, ...taskCategories]
+    .map((category) => String(category).trim())
+    .filter(Boolean)
+    .filter((category) => rawCategories.includes(category) || !LEGACY_DEFAULT_CATEGORIES.has(category) || taskCategories.includes(category));
   return {
     tasks,
     habits,
@@ -503,9 +506,9 @@ function DailyPlanCard({ today, tasks, habits, aiAccessToken }) {
       }, aiAccessToken);
       setAiPlan(result);
       setAiStatus("AI improved");
-    } catch {
+    } catch (error) {
       setAiPlan(null);
-      setAiStatus("Using built-in plan");
+      setAiStatus(error.message || "Using built-in plan");
     }
   }
 
@@ -1265,8 +1268,8 @@ export default function ADHDeedsApp() {
     try {
       const result = await askAI("reframe", { task }, session?.access_token);
       setAiInsight({ ...fallback, ...result, task, title: result.title || "Kind reframe" });
-    } catch {
-      setRescheduleAdvice("AI is unavailable right now, so I used the built-in reframe.");
+    } catch (error) {
+      setRescheduleAdvice(`${error.message || "AI is unavailable right now."} Using the built-in reframe instead.`);
     }
   }
   async function openOpinion(task) {
@@ -1283,8 +1286,8 @@ export default function ADHDeedsApp() {
     try {
       const result = await askAI("opinion", { task, context }, session?.access_token);
       setAiInsight({ task, ...result, title: result.title || "AI opinion" });
-    } catch {
-      setRescheduleAdvice("AI opinion is unavailable right now, so I used the built-in view.");
+    } catch (error) {
+      setRescheduleAdvice(`${error.message || "AI opinion is unavailable right now."} Using the built-in view instead.`);
     }
   }
   function addFirstStepTask() {

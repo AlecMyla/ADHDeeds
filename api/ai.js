@@ -47,6 +47,12 @@ function parseContent(data) {
   return JSON.parse(text);
 }
 
+function requestBody(req) {
+  if (!req.body) return {};
+  if (typeof req.body === "string") return JSON.parse(req.body);
+  return req.body;
+}
+
 async function verifyUser(req) {
   const authorization = req.headers.authorization || "";
   if (!authorization.startsWith("Bearer ") || !SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
@@ -77,7 +83,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { type, payload = {} } = req.body || {};
+    const { type, payload = {} } = requestBody(req);
     const prompt = buildPrompt(type, payload);
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
