@@ -568,8 +568,11 @@ function DailyPlanCard({ today, tasks, habits, aiAccessToken }) {
   const [energy, setEnergy] = useState("normal");
   const [aiPlan, setAiPlan] = useState(null);
   const [aiStatus, setAiStatus] = useState("");
-  const fallbackPlan = buildDailyPlan(today, tasks, habits, energy);
-  const plan = aiPlan?.items?.length ? aiPlan.items : fallbackPlan;
+  const [orderedPlan, setOrderedPlan] = useState([]);
+  const [dragPlanIndex, setDragPlanIndex] = useState(null);
+  const fallbackPlan = useMemo(() => buildDailyPlan(today, tasks, habits, energy), [today, tasks, habits, energy]);
+  const plan = useMemo(() => (aiPlan?.items?.length ? aiPlan.items : fallbackPlan), [aiPlan, fallbackPlan]);
+  const planKey = plan.join("\u0001");
 
   async function improvePlan() {
     setAiStatus("Thinking...");
@@ -594,6 +597,20 @@ function DailyPlanCard({ today, tasks, habits, aiAccessToken }) {
     setAiStatus("");
   }, [energy, today, tasks, habits]);
 
+  useEffect(() => {
+    setOrderedPlan(plan);
+  }, [planKey]);
+
+  function reorderPlanItem(sourceIndex, targetIndex) {
+    if (sourceIndex === targetIndex || sourceIndex < 0 || targetIndex < 0) return;
+    setOrderedPlan((current) => {
+      const next = [...current];
+      const [moved] = next.splice(sourceIndex, 1);
+      next.splice(targetIndex, 0, moved);
+      return next;
+    });
+  }
+
   return (
     <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200/70">
       <div className="flex items-center justify-between gap-3">
@@ -612,8 +629,30 @@ function DailyPlanCard({ today, tasks, habits, aiAccessToken }) {
         {aiStatus && <span className="text-xs font-semibold text-slate-400">{aiStatus}</span>}
       </div>
       <ol className="mt-4 space-y-2">
-        {plan.map((item, index) => (
-          <li key={`${item}-${index}`} className="flex gap-3 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-700">
+        {orderedPlan.map((item, index) => (
+          <li
+            key={`${item}-${index}`}
+            draggable
+            onDragStart={(event) => {
+              event.stopPropagation();
+              event.dataTransfer.effectAllowed = "move";
+              event.dataTransfer.setData("application/x-plan-index", String(index));
+              setDragPlanIndex(index);
+            }}
+            onDragOver={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              const sourceIndex = Number(event.dataTransfer.getData("application/x-plan-index"));
+              reorderPlanItem(sourceIndex, index);
+              setDragPlanIndex(null);
+            }}
+            onDragEnd={() => setDragPlanIndex(null)}
+            className={`flex cursor-grab gap-3 rounded-xl px-3 py-2 text-sm text-slate-700 active:cursor-grabbing ${dragPlanIndex === index ? "bg-blue-50 ring-1 ring-blue-100" : "bg-slate-50"}`}
+          >
             <span className="font-bold text-[#3577DE]">{index + 1}</span>
             <span>{item}</span>
           </li>
@@ -633,17 +672,19 @@ function TodaySection({ id, children, onMove }) {
       draggable
       onDragStart={(event) => {
         event.dataTransfer.effectAllowed = "move";
-        event.dataTransfer.setData("text/plain", id);
+        event.dataTransfer.setData("application/x-today-section", id);
       }}
       onDragOver={(event) => {
-        event.preventDefault();
-        setDragOver(true);
+        if (event.dataTransfer.types.includes("application/x-today-section")) {
+          event.preventDefault();
+          setDragOver(true);
+        }
       }}
       onDragLeave={() => setDragOver(false)}
       onDrop={(event) => {
         event.preventDefault();
         setDragOver(false);
-        onMove(event.dataTransfer.getData("text/plain"), id);
+        onMove(event.dataTransfer.getData("application/x-today-section"), id);
       }}
       className={`group cursor-grab rounded-2xl transition active:cursor-grabbing ${dragOver ? "ring-2 ring-[#3577DE] ring-offset-2 ring-offset-[#F3F6FB]" : ""}`}
     >
