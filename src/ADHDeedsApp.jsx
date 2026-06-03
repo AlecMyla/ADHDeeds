@@ -10,6 +10,7 @@ import {
   CirclePlus,
   ClipboardList,
   Flame,
+  GripVertical,
   Home,
   Minus,
   Pencil,
@@ -76,6 +77,7 @@ const RECURRENCE_OPTIONS = [
   { label: "Weekly", value: "weekly" },
   { label: "Monthly", value: "monthly" },
 ];
+const TODAY_SECTION_ORDER = ["plan", "tasks", "nudges", "habits"];
 
 function startOfWeek(date = new Date()) {
   const copy = new Date(date);
@@ -146,6 +148,7 @@ function seedData() {
     brainDump: [],
     categories: DEFAULT_CATEGORIES,
     recurringTasks: [],
+    ui: { todayOrder: TODAY_SECTION_ORDER },
   };
 }
 function normalizeData(raw) {
@@ -169,6 +172,9 @@ function normalizeData(raw) {
   const recurringTasks = Array.isArray(raw.recurringTasks)
     ? raw.recurringTasks.filter((item) => item?.id && item?.frequency && item?.startDate)
     : [];
+  const todayOrder = Array.isArray(raw.ui?.todayOrder)
+    ? [...raw.ui.todayOrder.filter((item) => TODAY_SECTION_ORDER.includes(item)), ...TODAY_SECTION_ORDER].filter((item, index, list) => list.indexOf(item) === index)
+    : TODAY_SECTION_ORDER;
   const recurringCategories = recurringTasks.map((task) => task.category).filter(Boolean);
   const categories = [...rawCategories, ...taskCategories, ...recurringCategories]
     .map((category) => String(category).trim())
@@ -179,6 +185,7 @@ function normalizeData(raw) {
     habits,
     brainDump,
     recurringTasks,
+    ui: { ...(raw.ui || {}), todayOrder },
     categories: [...new Set(categories)].sort((a, b) => a.localeCompare(b)),
   };
 }
@@ -618,8 +625,101 @@ function DailyPlanCard({ today, tasks, habits, aiAccessToken }) {
   );
 }
 
-function TodayView({ today, tasks, habits, aiAccessToken, onToggleTask, onToggleHabit, onEditTask, onAddTask, onReframeTask, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, nudges, points, progress }) {
+function TodaySection({ id, label, children, onMove }) {
+  const [dragOver, setDragOver] = useState(false);
+
+  return (
+    <motion.div
+      layout
+      draggable
+      onDragStart={(event) => {
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", id);
+      }}
+      onDragOver={(event) => {
+        event.preventDefault();
+        setDragOver(true);
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(event) => {
+        event.preventDefault();
+        setDragOver(false);
+        onMove(event.dataTransfer.getData("text/plain"), id);
+      }}
+      className={`group rounded-2xl transition ${dragOver ? "ring-2 ring-[#3577DE] ring-offset-2 ring-offset-[#F3F6FB]" : ""}`}
+    >
+      <div className="mb-1 flex items-center justify-end">
+        <div className="flex cursor-grab items-center gap-1 rounded-full bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400 ring-1 ring-slate-200 active:cursor-grabbing">
+          <GripVertical size={13} /> {label}
+        </div>
+      </div>
+      {children}
+    </motion.div>
+  );
+}
+
+function TodayView({ today, tasks, habits, aiAccessToken, todaySectionOrder, onReorderSection, onToggleTask, onToggleHabit, onEditTask, onAddTask, onReframeTask, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, nudges, points, progress }) {
   const todaysTasks = tasks.filter((t) => t.date === isoDate(today));
+  const sections = {
+    plan: {
+      label: "Move daily plan",
+      content: <DailyPlanCard today={today} tasks={tasks} habits={habits} aiAccessToken={aiAccessToken} />,
+    },
+    tasks: {
+      label: "Move tasks",
+      content: (
+        <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-slate-200/70">
+          <div className="flex items-center justify-between px-2 pb-2 pt-1">
+            <h3 className="text-sm font-bold text-[#112849]">Today’s tasks</h3>
+            <span className="text-xs text-slate-400">{todaysTasks.filter((t) => t.done).length} / {todaysTasks.length} complete</span>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {todaysTasks.length ? todaysTasks.map((task) => (
+              <TaskRow
+                key={task.id}
+                task={task}
+                onToggle={onToggleTask}
+                onEdit={onEditTask}
+                onReframe={onReframeTask}
+                onMoveTomorrow={onMoveTomorrow}
+                onMoveTomorrowPenalty={onMoveTomorrowPenalty}
+              />
+            )) : <p className="p-4 text-sm text-slate-400">Nothing planned today.</p>}
+          </div>
+          <button onClick={() => onAddTask(isoDate(today))} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-50 py-3 text-sm font-semibold text-[#3577DE] ring-1 ring-blue-100 hover:bg-blue-100">
+            <Plus size={16} /> Add task
+          </button>
+        </div>
+      ),
+    },
+    nudges: {
+      label: "Move next",
+      content: <CategoryNudges nudges={nudges} onAskOpinion={onAskOpinion} />,
+    },
+    habits: {
+      label: "Move habits",
+      content: (
+        <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200/70">
+          <h3 className="mb-3 text-sm font-bold text-[#112849]">Today’s habits</h3>
+          <div className="space-y-2">
+            {habits.map((habit) => {
+              const checked = !!habit.ticks[isoDate(today)];
+              return (
+                <button key={habit.id} onClick={() => onToggleHabit(habit.id, isoDate(today))} className="flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left hover:bg-slate-50">
+                  <span className={`grid h-6 w-6 place-items-center rounded-lg border ${checked ? "border-[#3577DE] bg-[#3577DE] text-white" : "border-slate-300 text-transparent"}`}><Check size={15} strokeWidth={3} /></span>
+                  <div className="flex-1"><div className="text-sm font-medium text-slate-800">{habit.name}</div><div className="text-[11px] text-slate-400">{habit.detail}</div></div>
+                  <span className="text-xs font-semibold text-slate-400">{habit.points} pts</span>
+                </button>
+              );
+            })}
+            {!habits.length && <p className="p-4 text-sm text-slate-400">No habits yet.</p>}
+          </div>
+        </div>
+      ),
+    },
+  };
+  const visibleOrder = todaySectionOrder.filter((id) => sections[id] && (id !== "nudges" || nudges.length));
+
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4 pb-24">
       <div className="rounded-3xl bg-[#112849] p-5 text-white shadow-sm">
@@ -635,45 +735,11 @@ function TodayView({ today, tasks, habits, aiAccessToken, onToggleTask, onToggle
           <Flame size={16} className="text-[#6EA8FF]" /> <strong className="text-white">{points}</strong> points this week
         </div>
       </div>
-      <DailyPlanCard today={today} tasks={tasks} habits={habits} aiAccessToken={aiAccessToken} />
-      <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-slate-200/70">
-        <div className="flex items-center justify-between px-2 pb-2 pt-1">
-          <h3 className="text-sm font-bold text-[#112849]">Today’s tasks</h3>
-          <span className="text-xs text-slate-400">{todaysTasks.filter((t) => t.done).length} / {todaysTasks.length} complete</span>
-        </div>
-        <div className="divide-y divide-slate-100">
-          {todaysTasks.length ? todaysTasks.map((task) => (
-            <TaskRow
-              key={task.id}
-              task={task}
-              onToggle={onToggleTask}
-              onEdit={onEditTask}
-              onReframe={onReframeTask}
-              onMoveTomorrow={onMoveTomorrow}
-              onMoveTomorrowPenalty={onMoveTomorrowPenalty}
-            />
-          )) : <p className="p-4 text-sm text-slate-400">Nothing planned today.</p>}
-        </div>
-        <button onClick={() => onAddTask(isoDate(today))} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-50 py-3 text-sm font-semibold text-[#3577DE] ring-1 ring-blue-100 hover:bg-blue-100">
-          <Plus size={16} /> Add task
-        </button>
-      </div>
-      <CategoryNudges nudges={nudges} onAskOpinion={onAskOpinion} />
-      <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200/70">
-        <h3 className="mb-3 text-sm font-bold text-[#112849]">Today’s habits</h3>
-        <div className="space-y-2">
-          {habits.map((habit) => {
-            const checked = !!habit.ticks[isoDate(today)];
-            return (
-              <button key={habit.id} onClick={() => onToggleHabit(habit.id, isoDate(today))} className="flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left hover:bg-slate-50">
-                <span className={`grid h-6 w-6 place-items-center rounded-lg border ${checked ? "border-[#3577DE] bg-[#3577DE] text-white" : "border-slate-300 text-transparent"}`}><Check size={15} strokeWidth={3} /></span>
-                <div className="flex-1"><div className="text-sm font-medium text-slate-800">{habit.name}</div><div className="text-[11px] text-slate-400">{habit.detail}</div></div>
-                <span className="text-xs font-semibold text-slate-400">{habit.points} pts</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      {visibleOrder.map((id) => (
+        <TodaySection key={id} id={id} label={sections[id].label} onMove={onReorderSection}>
+          {sections[id].content}
+        </TodaySection>
+      ))}
     </motion.div>
   );
 }
@@ -1363,6 +1429,7 @@ export default function ADHDeedsApp() {
   const points = taskPoints + habitPoints;
   const todayTasks = weekTasks.filter((task) => task.date === isoDate(today));
   const todayProgress = todayTasks.length ? Math.round((todayTasks.filter((task) => task.done).length / todayTasks.length) * 100) : 0;
+  const todaySectionOrder = data.ui?.todayOrder || TODAY_SECTION_ORDER;
   const categories = data.categories || [];
   const categoryNudges = categories.map((category) => {
     const task = [...weekTasks]
@@ -1508,6 +1575,17 @@ export default function ADHDeedsApp() {
       return { ...old, categories: [...existing, name].sort((a, b) => a.localeCompare(b)) };
     });
   }
+  function reorderTodaySection(sourceId, targetId) {
+    if (!sourceId || !targetId || sourceId === targetId) return;
+    setData((old) => {
+      const current = old.ui?.todayOrder || TODAY_SECTION_ORDER;
+      const withoutSource = current.filter((id) => id !== sourceId);
+      const targetIndex = withoutSource.indexOf(targetId);
+      if (targetIndex < 0) return old;
+      const nextOrder = [...withoutSource.slice(0, targetIndex), sourceId, ...withoutSource.slice(targetIndex)];
+      return { ...old, ui: { ...(old.ui || {}), todayOrder: nextOrder } };
+    });
+  }
   async function openReframeTask(task) {
     const fallback = {
       task,
@@ -1612,7 +1690,7 @@ export default function ADHDeedsApp() {
             <button key={tab.id} onClick={() => setView(tab.id)} className={`rounded-full px-5 py-2.5 text-sm font-semibold ${view === tab.id ? "bg-[#112849] text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>{tab.label}</button>
           ))}
         </div>
-        {view === "today" && <TodayView today={today} tasks={weekTasks} habits={data.habits} aiAccessToken={session?.access_token} onToggleTask={toggleTask} onToggleHabit={toggleHabit} onEditTask={openEditTask} onAddTask={openAddTask} onReframeTask={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} nudges={categoryNudges} points={points} progress={todayProgress} />}
+        {view === "today" && <TodayView today={today} tasks={weekTasks} habits={data.habits} aiAccessToken={session?.access_token} todaySectionOrder={todaySectionOrder} onReorderSection={reorderTodaySection} onToggleTask={toggleTask} onToggleHabit={toggleHabit} onEditTask={openEditTask} onAddTask={openAddTask} onReframeTask={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} nudges={categoryNudges} points={points} progress={todayProgress} />}
         {view === "week" && <WeekView days={days} tasks={weekTasks} onToggle={toggleTask} onEdit={openEditTask} onAddTask={openAddTask} onReframe={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} onMoveTask={moveTask} today={today} points={points} taskPoints={taskPoints} habitPoints={habitPoints} nudges={categoryNudges} />}
         {view === "dumpster" && <BrainDumpsterView items={data.brainDump || []} categories={categories} onAddItems={addBrainDumpItems} onRemoveItem={removeBrainDumpItem} onConvertItem={convertBrainDumpItem} onAddCategory={() => setCategorySheetOpen(true)} />}
         {view === "habits" && <HabitsView days={days} habits={data.habits} onToggle={toggleHabit} onAdd={openAddHabit} onEdit={openEditHabit} onRemove={removeHabit} />}
