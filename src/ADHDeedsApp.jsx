@@ -1176,7 +1176,7 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
                   </select>
                 </label>
               )}
-              {!categories.length && <button type="button" onClick={onAddCategory} className="w-full rounded-xl bg-blue-50 py-3 text-sm font-semibold text-[#3577DE] ring-1 ring-blue-100">Add Category</button>}
+              <button type="button" onClick={onAddCategory} className="w-full rounded-xl bg-blue-50 py-3 text-sm font-semibold text-[#3577DE] ring-1 ring-blue-100">Add Category</button>
               <div className="grid grid-cols-3 gap-2">{POINT_OPTIONS.map((option) => <button type="button" key={option.value} onClick={() => setPoints(option.value)} className={`rounded-xl border px-2 py-3 text-center ${points === option.value ? "border-[#3577DE] bg-blue-50 text-[#112849]" : "border-slate-200 text-slate-500"}`}><span className="block text-xs font-semibold">{option.label}</span><span className="mt-1 block text-[11px]">{option.value} pts</span></button>)}</div>
               <button type="button" onClick={() => setImportant(!important)} className="flex w-full items-center gap-3 rounded-xl bg-slate-50 p-3 text-left"><span className={`grid h-5 w-5 place-items-center rounded-md border ${important ? "border-[#3577DE] bg-[#3577DE] text-white" : "border-slate-300 text-transparent"}`}><Check size={13} /></span><span className="text-sm text-slate-700">Mark as important</span></button>
               <button type="submit" disabled={!category} className="w-full rounded-xl bg-[#3577DE] py-3.5 text-sm font-semibold text-white disabled:bg-slate-300">{task ? "Save changes" : "Add task"}</button>
