@@ -10,7 +10,6 @@ import {
   CirclePlus,
   ClipboardList,
   Flame,
-  GripVertical,
   Home,
   Minus,
   Pencil,
@@ -625,7 +624,7 @@ function DailyPlanCard({ today, tasks, habits, aiAccessToken }) {
   );
 }
 
-function TodaySection({ id, label, children, onMove }) {
+function TodaySection({ id, children, onMove }) {
   const [dragOver, setDragOver] = useState(false);
 
   return (
@@ -646,13 +645,8 @@ function TodaySection({ id, label, children, onMove }) {
         setDragOver(false);
         onMove(event.dataTransfer.getData("text/plain"), id);
       }}
-      className={`group rounded-2xl transition ${dragOver ? "ring-2 ring-[#3577DE] ring-offset-2 ring-offset-[#F3F6FB]" : ""}`}
+      className={`group cursor-grab rounded-2xl transition active:cursor-grabbing ${dragOver ? "ring-2 ring-[#3577DE] ring-offset-2 ring-offset-[#F3F6FB]" : ""}`}
     >
-      <div className="mb-1 flex items-center justify-end">
-        <div className="flex cursor-grab items-center gap-1 rounded-full bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400 ring-1 ring-slate-200 active:cursor-grabbing">
-          <GripVertical size={13} /> {label}
-        </div>
-      </div>
       {children}
     </motion.div>
   );
@@ -662,11 +656,9 @@ function TodayView({ today, tasks, habits, aiAccessToken, todaySectionOrder, onR
   const todaysTasks = tasks.filter((t) => t.date === isoDate(today));
   const sections = {
     plan: {
-      label: "Move daily plan",
       content: <DailyPlanCard today={today} tasks={tasks} habits={habits} aiAccessToken={aiAccessToken} />,
     },
     tasks: {
-      label: "Move tasks",
       content: (
         <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-slate-200/70">
           <div className="flex items-center justify-between px-2 pb-2 pt-1">
@@ -693,11 +685,9 @@ function TodayView({ today, tasks, habits, aiAccessToken, todaySectionOrder, onR
       ),
     },
     nudges: {
-      label: "Move next",
       content: <CategoryNudges nudges={nudges} onAskOpinion={onAskOpinion} />,
     },
     habits: {
-      label: "Move habits",
       content: (
         <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200/70">
           <h3 className="mb-3 text-sm font-bold text-[#112849]">Today’s habits</h3>
@@ -736,7 +726,7 @@ function TodayView({ today, tasks, habits, aiAccessToken, todaySectionOrder, onR
         </div>
       </div>
       {visibleOrder.map((id) => (
-        <TodaySection key={id} id={id} label={sections[id].label} onMove={onReorderSection}>
+        <TodaySection key={id} id={id} onMove={onReorderSection}>
           {sections[id].content}
         </TodaySection>
       ))}
