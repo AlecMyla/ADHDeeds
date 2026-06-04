@@ -9,13 +9,16 @@ import {
   ChevronRight,
   CirclePlus,
   ClipboardList,
+  ExternalLink,
   Flame,
   Home,
   Minus,
   Pencil,
   Plus,
   ArrowRight,
+  Settings2,
   Sparkles,
+  SquarePen,
   Trash2,
   X,
 } from "lucide-react";
@@ -76,7 +79,14 @@ const RECURRENCE_OPTIONS = [
   { label: "Weekly", value: "weekly" },
   { label: "Monthly", value: "monthly" },
 ];
-const TODAY_SECTION_ORDER = ["plan", "tasks", "nudges", "habits"];
+const TODAY_SECTION_ORDER = ["plan", "tasks", "dumpster", "nudges", "habits"];
+const WEEK_SECTION_ORDER = ["stats", "nudges", "tasks"];
+const FEATURE_OPTIONS = [
+  { id: "stats", label: "Stats" },
+  { id: "dailyPlan", label: "Daily plan" },
+  { id: "worthNext", label: "Worth doing next" },
+  { id: "brainDumpster", label: "Brain Dumpster" },
+];
 
 function startOfWeek(date = new Date()) {
   const copy = new Date(date);
@@ -94,6 +104,11 @@ function isoDate(date) {
   const copy = new Date(date);
   copy.setMinutes(copy.getMinutes() - copy.getTimezoneOffset());
   return copy.toISOString().slice(0, 10);
+}
+function normalizeWebsite(value) {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return "";
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
 }
 function pretty(date, options = { day: "numeric", month: "short" }) {
   return date.toLocaleDateString("en-GB", options);
@@ -127,6 +142,8 @@ function taskFromRecurring(template, dateKey) {
     points: template.points,
     done: false,
     important: template.important,
+    notes: template.notes || "",
+    website: template.website || "",
   };
 }
 function categoryStyle(category) {
@@ -147,7 +164,7 @@ function seedData() {
     brainDump: [],
     categories: DEFAULT_CATEGORIES,
     recurringTasks: [],
-    ui: { todayOrder: TODAY_SECTION_ORDER },
+    ui: { todayOrder: TODAY_SECTION_ORDER, weekOrder: WEEK_SECTION_ORDER, hiddenFeatures: [] },
   };
 }
 function normalizeData(raw) {
@@ -174,6 +191,12 @@ function normalizeData(raw) {
   const todayOrder = Array.isArray(raw.ui?.todayOrder)
     ? [...raw.ui.todayOrder.filter((item) => TODAY_SECTION_ORDER.includes(item)), ...TODAY_SECTION_ORDER].filter((item, index, list) => list.indexOf(item) === index)
     : TODAY_SECTION_ORDER;
+  const weekOrder = Array.isArray(raw.ui?.weekOrder)
+    ? [...raw.ui.weekOrder.filter((item) => WEEK_SECTION_ORDER.includes(item)), ...WEEK_SECTION_ORDER].filter((item, index, list) => list.indexOf(item) === index)
+    : WEEK_SECTION_ORDER;
+  const hiddenFeatures = Array.isArray(raw.ui?.hiddenFeatures)
+    ? raw.ui.hiddenFeatures.filter((item) => FEATURE_OPTIONS.some((option) => option.id === item))
+    : [];
   const recurringCategories = recurringTasks.map((task) => task.category).filter(Boolean);
   const categories = [...rawCategories, ...taskCategories, ...recurringCategories]
     .map((category) => String(category).trim())
@@ -184,7 +207,7 @@ function normalizeData(raw) {
     habits,
     brainDump,
     recurringTasks,
-    ui: { ...(raw.ui || {}), todayOrder },
+    ui: { ...(raw.ui || {}), todayOrder, weekOrder, hiddenFeatures },
     categories: [...new Set(categories)].sort((a, b) => a.localeCompare(b)),
   };
 }
@@ -281,7 +304,10 @@ function Logo({ size = "header" }) {
   return <img src="/adhdeeds-header-logo.png" alt="ADHDeeds" className="h-12 w-auto max-w-[210px] object-contain sm:max-w-[260px]" />;
 }
 
-function TaskRow({ task, onToggle, onRemove, onEdit, onReframe, onMoveTomorrow, onMoveTomorrowPenalty, onDragStart, compact = false }) {
+function TaskRow({ task, onToggle, onRemove, onEdit, onReframe, onMoveTomorrow, onMoveTomorrowPenalty, onDragStart, compact = false, showWebsite = false }) {
+  const [noteOpen, setNoteOpen] = useState(false);
+  const touchTimer = useRef(null);
+  const website = normalizeWebsite(task.website);
   return (
     <motion.div
       layout
@@ -299,7 +325,35 @@ function TaskRow({ task, onToggle, onRemove, onEdit, onReframe, onMoveTomorrow, 
         <Check size={13} strokeWidth={3} />
       </button>
       <div className="min-w-0 flex-1">
-        <div className={`text-sm font-medium leading-5 ${task.done ? "text-slate-400 line-through" : "text-slate-800"}`}>{task.name}</div>
+        <div className={`flex min-w-0 items-center gap-1.5 text-sm font-medium leading-5 ${task.done ? "text-slate-400 line-through" : "text-slate-800"}`}>
+          <span className="min-w-0 truncate">{task.name}</span>
+          {task.notes && (
+            <span className="relative inline-flex shrink-0">
+              <button
+                type="button"
+                onMouseEnter={() => setNoteOpen(true)}
+                onMouseLeave={() => setNoteOpen(false)}
+                onTouchStart={() => { touchTimer.current = setTimeout(() => setNoteOpen(true), 450); }}
+                onTouchEnd={() => { if (touchTimer.current) clearTimeout(touchTimer.current); }}
+                onClick={(event) => { event.stopPropagation(); setNoteOpen((open) => !open); }}
+                className="grid h-5 w-5 place-items-center rounded-md bg-slate-100 text-slate-500 hover:bg-blue-50 hover:text-[#3577DE]"
+                aria-label="Show task note"
+              >
+                <SquarePen size={13} />
+              </button>
+              {noteOpen && (
+                <span className="absolute left-0 top-6 z-20 w-56 rounded-xl bg-[#112849] p-3 text-xs font-medium leading-5 text-white shadow-xl">
+                  {task.notes}
+                </span>
+              )}
+            </span>
+          )}
+          {showWebsite && website && (
+            <a href={website} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} className="grid h-5 w-5 shrink-0 place-items-center rounded-md bg-blue-50 text-[#3577DE] hover:bg-blue-100" aria-label="Open task website">
+              <ExternalLink size={13} />
+            </a>
+          )}
+        </div>
         <div className="mt-1 flex flex-wrap items-center gap-1.5">
           <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${categoryStyle(task.category)}`}>{task.category}</span>
           <span className="text-[11px] font-medium text-slate-400">{task.points} pts</span>
@@ -341,17 +395,32 @@ function TaskRow({ task, onToggle, onRemove, onEdit, onReframe, onMoveTomorrow, 
 }
 
 function Header({ activeWeek, setActiveWeek, onProfile, points }) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+  function pickDate(value) {
+    if (!value) return;
+    setActiveWeek(startOfWeek(new Date(`${value}T00:00:00`)));
+    setPickerOpen(false);
+  }
+
   return (
     <header className="relative bg-[#112849] px-4 py-3 text-white sm:px-8">
       <div className="mx-auto grid max-w-none grid-cols-[1fr_auto] items-center gap-3 md:grid-cols-[1fr_auto_1fr] 2xl:max-w-[1800px]">
         <div className="justify-self-start"><Logo /></div>
-        <div className="order-3 col-span-2 flex w-full items-center justify-between rounded-xl bg-white/10 p-1 md:order-none md:col-span-1 md:w-[280px] md:justify-self-center">
+        <div className="relative order-3 col-span-2 flex w-full items-center justify-between rounded-xl bg-white/10 p-1 md:order-none md:col-span-1 md:w-[280px] md:justify-self-center">
           <button onClick={() => setActiveWeek(addDays(activeWeek, -7))} className="grid h-9 w-9 place-items-center rounded-lg text-blue-100 hover:bg-white/10"><ChevronLeft size={20} /></button>
-          <div className="text-center">
+          <button onClick={() => setPickerOpen((open) => !open)} className="rounded-lg px-4 py-1 text-center hover:bg-white/10">
             <div className="text-[10px] uppercase tracking-widest text-blue-200/70">Week of</div>
             <div className="text-sm font-semibold">{pretty(activeWeek, { day: "numeric", month: "long" })}</div>
-          </div>
+          </button>
           <button onClick={() => setActiveWeek(addDays(activeWeek, 7))} className="grid h-9 w-9 place-items-center rounded-lg text-blue-100 hover:bg-white/10"><ChevronRight size={20} /></button>
+          {pickerOpen && (
+            <div className="absolute left-1/2 top-12 z-30 w-64 -translate-x-1/2 rounded-2xl bg-white p-4 text-slate-900 shadow-2xl ring-1 ring-slate-200">
+              <div className="text-sm font-bold text-[#112849]">Jump to week</div>
+              <p className="mt-1 text-xs text-slate-400">Choose any date. ADHDeeds will open that week.</p>
+              <input type="date" value={isoDate(activeWeek)} onChange={(event) => pickDate(event.target.value)} className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#3577DE]" />
+              <button onClick={() => setPickerOpen(false)} className="mt-3 w-full rounded-xl bg-slate-100 py-2 text-xs font-semibold text-slate-500">Close</button>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2 justify-self-end">
           <div className="rounded-full border border-white/15 px-3 py-2 text-sm"><strong>{points}</strong> points</div>
@@ -425,7 +494,8 @@ function AuthPanel({ session, authLoading, syncStatus, onGoogleSignIn, onSignIn,
   );
 }
 
-function ProfileSheet({ open, onClose, session, authLoading, syncStatus, notificationsEnabled, notificationSupported, onEnableNotifications, onGoogleSignIn, onSignIn, onSignOut }) {
+function ProfileSheet({ open, onClose, session, authLoading, syncStatus, notificationsEnabled, notificationSupported, hiddenFeatures, onToggleFeature, onEnableNotifications, onGoogleSignIn, onSignIn, onSignOut }) {
+  const [customiseOpen, setCustomiseOpen] = useState(false);
   return (
     <AnimatePresence>
       {open && (
@@ -438,6 +508,28 @@ function ProfileSheet({ open, onClose, session, authLoading, syncStatus, notific
               <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-white text-slate-500"><X size={18}/></button>
             </div>
             <AuthPanel session={session} authLoading={authLoading} syncStatus={syncStatus} onGoogleSignIn={onGoogleSignIn} onSignIn={onSignIn} onSignOut={onSignOut} />
+            <div className="mt-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200/70">
+              <button onClick={() => setCustomiseOpen((open) => !open)} className="flex w-full items-center justify-between text-left">
+                <span>
+                  <span className="block text-sm font-bold text-[#112849]">Customise</span>
+                  <span className="mt-1 block text-xs text-slate-400">Hide features you do not want to see.</span>
+                </span>
+                <Settings2 size={18} className="text-slate-400" />
+              </button>
+              {customiseOpen && (
+                <div className="mt-3 space-y-2">
+                  {FEATURE_OPTIONS.map((feature) => {
+                    const hidden = hiddenFeatures.includes(feature.id);
+                    return (
+                      <button key={feature.id} onClick={() => onToggleFeature(feature.id)} className="flex w-full items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                        <span>{feature.label}</span>
+                        <span className={`grid h-5 w-5 place-items-center rounded-md border ${hidden ? "border-slate-300 text-transparent" : "border-[#3577DE] bg-[#3577DE] text-white"}`}><Check size={13} strokeWidth={3} /></span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
             <div className="mt-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200/70">
               <div className="flex items-start gap-3">
                 <Bell size={18} className="mt-0.5 text-[#3577DE]" />
@@ -663,7 +755,7 @@ function DailyPlanCard({ today, tasks, habits, aiAccessToken }) {
   );
 }
 
-function TodaySection({ id, children, onMove }) {
+function TodaySection({ id, children, onMove, className = "" }) {
   const [dragOver, setDragOver] = useState(false);
 
   return (
@@ -686,14 +778,14 @@ function TodaySection({ id, children, onMove }) {
         setDragOver(false);
         onMove(event.dataTransfer.getData("application/x-today-section"), id);
       }}
-      className={`group cursor-grab rounded-2xl transition active:cursor-grabbing ${dragOver ? "ring-2 ring-[#3577DE] ring-offset-2 ring-offset-[#F3F6FB]" : ""}`}
+      className={`group cursor-grab rounded-2xl transition active:cursor-grabbing ${className} ${dragOver ? "ring-2 ring-[#3577DE] ring-offset-2 ring-offset-[#F3F6FB]" : ""}`}
     >
       {children}
     </motion.div>
   );
 }
 
-function TodayView({ today, tasks, habits, aiAccessToken, todaySectionOrder, onReorderSection, onToggleTask, onToggleHabit, onEditTask, onAddTask, onReframeTask, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, nudges, points, progress }) {
+function TodayView({ today, tasks, habits, brainDump, categories, hiddenFeatures, aiAccessToken, todaySectionOrder, onReorderSection, onToggleTask, onToggleHabit, onEditTask, onAddTask, onAddBrainDumpItems, onRemoveBrainDumpItem, onConvertBrainDumpItem, onAddCategory, onReframeTask, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, nudges, points, progress }) {
   const todaysTasks = tasks.filter((t) => t.date === isoDate(today));
   const sections = {
     plan: {
@@ -716,6 +808,7 @@ function TodayView({ today, tasks, habits, aiAccessToken, todaySectionOrder, onR
                 onReframe={onReframeTask}
                 onMoveTomorrow={onMoveTomorrow}
                 onMoveTomorrowPenalty={onMoveTomorrowPenalty}
+                showWebsite
               />
             )) : <p className="p-4 text-sm text-slate-400">Nothing planned today.</p>}
           </div>
@@ -727,6 +820,9 @@ function TodayView({ today, tasks, habits, aiAccessToken, todaySectionOrder, onR
     },
     nudges: {
       content: <CategoryNudges nudges={nudges} onAskOpinion={onAskOpinion} />,
+    },
+    dumpster: {
+      content: <BrainDumpsterView items={brainDump} categories={categories} onAddItems={onAddBrainDumpItems} onRemoveItem={onRemoveBrainDumpItem} onConvertItem={onConvertBrainDumpItem} onAddCategory={onAddCategory} compact />,
     },
     habits: {
       content: (
@@ -749,7 +845,14 @@ function TodayView({ today, tasks, habits, aiAccessToken, todaySectionOrder, onR
       ),
     },
   };
-  const visibleOrder = todaySectionOrder.filter((id) => sections[id] && (id !== "nudges" || nudges.length));
+  const hidden = new Set(hiddenFeatures);
+  const visibleOrder = todaySectionOrder.filter((id) => {
+    if (!sections[id]) return false;
+    if (id === "plan" && hidden.has("dailyPlan")) return false;
+    if (id === "nudges" && (hidden.has("worthNext") || !nudges.length)) return false;
+    if (id === "dumpster" && hidden.has("brainDumpster")) return false;
+    return true;
+  });
 
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4 pb-24">
@@ -766,11 +869,13 @@ function TodayView({ today, tasks, habits, aiAccessToken, todaySectionOrder, onR
           <Flame size={16} className="text-[#6EA8FF]" /> <strong className="text-white">{points}</strong> points this week
         </div>
       </div>
-      {visibleOrder.map((id) => (
-        <TodaySection key={id} id={id} onMove={onReorderSection}>
-          {sections[id].content}
-        </TodaySection>
-      ))}
+      <div className="grid gap-4 lg:grid-cols-2">
+        {visibleOrder.map((id) => (
+          <TodaySection key={id} id={id} onMove={onReorderSection}>
+            {sections[id].content}
+          </TodaySection>
+        ))}
+      </div>
     </motion.div>
   );
 }
@@ -869,7 +974,7 @@ function MobileWeekTask({ task, days, onToggle, onEdit, onReframe, onMoveTask, o
   );
 }
 
-function WeekView({ days, tasks, onToggle, onEdit, onAddTask, onReframe, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, onMoveTask, today, points, taskPoints, habitPoints, nudges }) {
+function WeekView({ days, tasks, weekSectionOrder, hiddenFeatures, onReorderSection, onToggle, onEdit, onAddTask, onReframe, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, onMoveTask, today, points, taskPoints, habitPoints, nudges }) {
   const initialDay = days.find((day) => isoDate(day) === isoDate(today)) || days[0];
   const [selectedDay, setSelectedDay] = useState(isoDate(initialDay));
   const done = tasks.filter((t) => t.done).length;
@@ -879,83 +984,112 @@ function WeekView({ days, tasks, onToggle, onEdit, onAddTask, onReframe, onAskOp
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", taskId);
   }
+  const hidden = new Set(hiddenFeatures);
+  const sections = {
+    stats: {
+      content: (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+          <ScoreCard points={points} taskPoints={taskPoints} habitPoints={habitPoints} />
+          <ProgressCard done={done} total={tasks.length} />
+          <div className="col-span-2 lg:col-span-1">
+            <DailyBars days={days} tasks={tasks} />
+          </div>
+        </div>
+      ),
+    },
+    nudges: {
+      content: <CategoryNudges nudges={nudges} onAskOpinion={onAskOpinion} />,
+    },
+    tasks: {
+      className: "lg:col-span-2",
+      content: (
+        <div className="space-y-5">
+          <div className="flex items-center justify-between lg:hidden">
+            <h2 className="text-xl font-bold tracking-tight text-[#112849]">This week</h2>
+            <div className="text-xs text-slate-400">Tap a day</div>
+          </div>
+          <div className="grid grid-cols-7 gap-1.5 lg:hidden">
+            {days.map((day) => {
+              const dayKey = isoDate(day);
+              const dayTasks = tasks.filter((task) => task.date === dayKey);
+              const isSelected = selectedDay === dayKey;
+              const isToday = isoDate(today) === dayKey;
+              return (
+                <button key={dayKey} onClick={() => setSelectedDay(dayKey)} className={`rounded-xl px-1 py-2 text-center ring-1 transition ${isSelected ? "bg-[#112849] text-white ring-[#112849]" : "bg-white text-slate-500 ring-slate-200"}`}>
+                  <div className="text-[10px] font-bold uppercase">{pretty(day, { weekday: "short" }).slice(0, 1)}</div>
+                  <div className="mt-1 text-sm font-bold">{pretty(day, { day: "numeric" })}</div>
+                  <div className={`mx-auto mt-1 h-1.5 w-1.5 rounded-full ${dayTasks.length ? isSelected ? "bg-white" : "bg-[#3577DE]" : isToday ? "bg-amber-400" : "bg-transparent"}`} />
+                </button>
+              );
+            })}
+          </div>
+          <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-slate-200/70 lg:hidden">
+            <div className="flex items-center justify-between px-2 pb-2 pt-1">
+              <div>
+                <h3 className="text-sm font-bold text-[#112849]">{pretty(selectedDate, { weekday: "long" })}</h3>
+                <p className="text-xs text-slate-400">{pretty(selectedDate, { day: "numeric", month: "long" })}</p>
+              </div>
+              <span className="text-xs text-slate-400">{selectedTasks.filter((task) => task.done).length} / {selectedTasks.length} complete</span>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {selectedTasks.length ? selectedTasks.map((task) => (
+                <MobileWeekTask
+                  key={task.id}
+                  task={task}
+                  days={days}
+                  onToggle={onToggle}
+                  onEdit={onEdit}
+                  onReframe={onReframe}
+                  onMoveTask={onMoveTask}
+                  onMoveTomorrow={onMoveTomorrow}
+                  onMoveTomorrowPenalty={onMoveTomorrowPenalty}
+                />
+              )) : <div className="p-5 text-center text-sm text-slate-400">No tasks planned.</div>}
+            </div>
+            <button onClick={() => onAddTask(selectedDay)} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-50 py-3 text-sm font-semibold text-[#3577DE] ring-1 ring-blue-100 hover:bg-blue-100">
+              <Plus size={16} /> Add task
+            </button>
+          </div>
+          <div className="hidden items-center justify-between lg:flex">
+            <h2 className="text-xl font-bold tracking-tight text-[#112849]">This week</h2>
+            <div className="text-xs text-slate-400">Drag tasks between days</div>
+          </div>
+          <div className="hidden lg:mx-0 lg:grid lg:grid-cols-7 lg:gap-3 lg:overflow-visible lg:px-0">
+            {days.map((day) => (
+              <div className="snap-start lg:min-w-0" key={isoDate(day)}>
+                <DayCard
+                  day={day}
+                  tasks={tasks.filter((t) => t.date === isoDate(day))}
+                  onToggle={onToggle}
+                  onEdit={onEdit}
+                  onAddTask={onAddTask}
+                  onReframe={onReframe}
+                  onMoveTomorrow={onMoveTomorrow}
+                  onMoveTomorrowPenalty={onMoveTomorrowPenalty}
+                  onDropTask={(taskId, date) => onMoveTask(taskId, date)}
+                  onDragTask={dragTask}
+                  today={today}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      ),
+    },
+  };
+  const visibleOrder = weekSectionOrder.filter((id) => {
+    if (!sections[id]) return false;
+    if (id === "stats" && hidden.has("stats")) return false;
+    if (id === "nudges" && (hidden.has("worthNext") || !nudges.length)) return false;
+    return true;
+  });
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-5 pb-24">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-        <ScoreCard points={points} taskPoints={taskPoints} habitPoints={habitPoints} />
-        <ProgressCard done={done} total={tasks.length} />
-        <div className="col-span-2 lg:col-span-1">
-          <DailyBars days={days} tasks={tasks} />
-        </div>
-      </div>
-      <CategoryNudges nudges={nudges} onAskOpinion={onAskOpinion} />
-      <div className="flex items-center justify-between lg:hidden">
-        <h2 className="text-xl font-bold tracking-tight text-[#112849]">This week</h2>
-        <div className="text-xs text-slate-400">Tap a day</div>
-      </div>
-      <div className="grid grid-cols-7 gap-1.5 lg:hidden">
-        {days.map((day) => {
-          const dayKey = isoDate(day);
-          const dayTasks = tasks.filter((task) => task.date === dayKey);
-          const isSelected = selectedDay === dayKey;
-          const isToday = isoDate(today) === dayKey;
-          return (
-            <button key={dayKey} onClick={() => setSelectedDay(dayKey)} className={`rounded-xl px-1 py-2 text-center ring-1 transition ${isSelected ? "bg-[#112849] text-white ring-[#112849]" : "bg-white text-slate-500 ring-slate-200"}`}>
-              <div className="text-[10px] font-bold uppercase">{pretty(day, { weekday: "short" }).slice(0, 1)}</div>
-              <div className="mt-1 text-sm font-bold">{pretty(day, { day: "numeric" })}</div>
-              <div className={`mx-auto mt-1 h-1.5 w-1.5 rounded-full ${dayTasks.length ? isSelected ? "bg-white" : "bg-[#3577DE]" : isToday ? "bg-amber-400" : "bg-transparent"}`} />
-            </button>
-          );
-        })}
-      </div>
-      <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-slate-200/70 lg:hidden">
-        <div className="flex items-center justify-between px-2 pb-2 pt-1">
-          <div>
-            <h3 className="text-sm font-bold text-[#112849]">{pretty(selectedDate, { weekday: "long" })}</h3>
-            <p className="text-xs text-slate-400">{pretty(selectedDate, { day: "numeric", month: "long" })}</p>
-          </div>
-          <span className="text-xs text-slate-400">{selectedTasks.filter((task) => task.done).length} / {selectedTasks.length} complete</span>
-        </div>
-        <div className="divide-y divide-slate-100">
-          {selectedTasks.length ? selectedTasks.map((task) => (
-            <MobileWeekTask
-              key={task.id}
-              task={task}
-              days={days}
-              onToggle={onToggle}
-              onEdit={onEdit}
-              onReframe={onReframe}
-              onMoveTask={onMoveTask}
-              onMoveTomorrow={onMoveTomorrow}
-              onMoveTomorrowPenalty={onMoveTomorrowPenalty}
-            />
-          )) : <div className="p-5 text-center text-sm text-slate-400">No tasks planned.</div>}
-        </div>
-        <button onClick={() => onAddTask(selectedDay)} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-50 py-3 text-sm font-semibold text-[#3577DE] ring-1 ring-blue-100 hover:bg-blue-100">
-          <Plus size={16} /> Add task
-        </button>
-      </div>
-      <div className="hidden items-center justify-between lg:flex">
-        <h2 className="text-xl font-bold tracking-tight text-[#112849]">This week</h2>
-        <div className="text-xs text-slate-400">Drag tasks between days</div>
-      </div>
-      <div className="hidden lg:mx-0 lg:grid lg:grid-cols-7 lg:gap-3 lg:overflow-visible lg:px-0">
-        {days.map((day) => (
-          <div className="snap-start lg:min-w-0" key={isoDate(day)}>
-            <DayCard
-              day={day}
-              tasks={tasks.filter((t) => t.date === isoDate(day))}
-              onToggle={onToggle}
-              onEdit={onEdit}
-              onAddTask={onAddTask}
-              onReframe={onReframe}
-              onMoveTomorrow={onMoveTomorrow}
-              onMoveTomorrowPenalty={onMoveTomorrowPenalty}
-              onDropTask={(taskId, date) => onMoveTask(taskId, date)}
-              onDragTask={dragTask}
-              today={today}
-            />
-          </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        {visibleOrder.map((id) => (
+          <TodaySection key={id} id={id} onMove={onReorderSection} className={sections[id].className || ""}>
+            {sections[id].content}
+          </TodaySection>
         ))}
       </div>
     </motion.div>
@@ -1008,7 +1142,7 @@ function HabitsView({ days, habits, onToggle, onAdd, onEdit, onRemove }) {
   );
 }
 
-function BrainDumpsterView({ items, categories, onAddItems, onRemoveItem, onConvertItem, onAddCategory }) {
+function BrainDumpsterView({ items, categories, onAddItems, onRemoveItem, onConvertItem, onAddCategory, compact = false }) {
   const [text, setText] = useState("");
 
   function submit(event) {
@@ -1020,9 +1154,9 @@ function BrainDumpsterView({ items, categories, onAddItems, onRemoveItem, onConv
   }
 
   return (
-    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4 pb-24">
+    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className={`space-y-4 ${compact ? "" : "pb-24"}`}>
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-[#112849]">Brain Dumpster</h2>
+        <h2 className={`${compact ? "text-sm" : "text-2xl"} font-bold tracking-tight text-[#112849]`}>Brain Dumpster</h2>
         <p className="mt-1 text-sm text-slate-500">Catch loose thoughts first. Decide what they are later.</p>
       </div>
       <form onSubmit={submit} className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200/70">
@@ -1111,6 +1245,8 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
   const [date, setDate] = useState(isoDate(days[0]));
   const [points, setPoints] = useState(10);
   const [important, setImportant] = useState(false);
+  const [notes, setNotes] = useState("");
+  const [website, setWebsite] = useState("");
   const [recurrence, setRecurrence] = useState("none");
   const [breakdown, setBreakdown] = useState([]);
   useEffect(() => {
@@ -1120,6 +1256,8 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
     setDate(task?.date || initialDate || isoDate(days[0]));
     setPoints(task?.points || 10);
     setImportant(!!task?.important);
+    setNotes(task?.notes || "");
+    setWebsite(task?.website || "");
     setRecurrence("none");
     setBreakdown([]);
   }, [open, days, task, initialDate, initialName, categories]);
@@ -1130,11 +1268,11 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
     event.preventDefault();
     if (!name.trim()) return;
     if (task) {
-      onUpdate({ ...task, name: name.trim(), category, date, points, important });
+      onUpdate({ ...task, name: name.trim(), category, date, points, important, notes: notes.trim(), website: normalizeWebsite(website) });
     } else {
-      onSave({ id: `task-${Date.now()}`, name: name.trim(), category, date, points, done: false, important, recurrence });
+      onSave({ id: `task-${Date.now()}`, name: name.trim(), category, date, points, done: false, important, notes: notes.trim(), website: normalizeWebsite(website), recurrence });
     }
-    setName(""); setCategory(categories[0] || ""); setPoints(10); setImportant(false); setRecurrence("none"); onClose();
+    setName(""); setCategory(categories[0] || ""); setPoints(10); setImportant(false); setNotes(""); setWebsite(""); setRecurrence("none"); onClose();
   }
   function createBreakdown() {
     if (!name.trim()) return;
@@ -1168,6 +1306,8 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
                 <label><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Category</span><select value={category} onChange={(e) => setCategory(e.target.value)} disabled={!categories.length} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none disabled:bg-slate-50 disabled:text-slate-400">{categories.length ? categories.map((item) => <option key={item}>{item}</option>) : <option>Create a category first</option>}</select></label>
                 <label><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Day</span><select value={date} onChange={(e) => setDate(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none">{days.map((day) => <option key={isoDate(day)} value={isoDate(day)}>{pretty(day, { weekday: "short", day: "numeric", month: "short" })}</option>)}</select></label>
               </div>
+              <label className="block"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Notes</span><textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="Useful context, booking reference, what to ask..." className="w-full resize-none rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#3577DE]" /></label>
+              <label className="block"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Website</span><input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="example.com" className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#3577DE]" /></label>
               {!task && (
                 <label className="block">
                   <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Repeat</span>
@@ -1461,6 +1601,8 @@ export default function ADHDeedsApp() {
   const todayTasks = weekTasks.filter((task) => task.date === isoDate(today));
   const todayProgress = todayTasks.length ? Math.round((todayTasks.filter((task) => task.done).length / todayTasks.length) * 100) : 0;
   const todaySectionOrder = data.ui?.todayOrder || TODAY_SECTION_ORDER;
+  const weekSectionOrder = data.ui?.weekOrder || WEEK_SECTION_ORDER;
+  const hiddenFeatures = data.ui?.hiddenFeatures || [];
   const categories = data.categories || [];
   const categoryNudges = categories.map((category) => {
     const task = [...weekTasks]
@@ -1497,6 +1639,8 @@ export default function ADHDeedsApp() {
             frequency: recurrence,
             points: task.points,
             important: task.important,
+            notes: task.notes || "",
+            website: task.website || "",
             skippedDates: [],
           },
         ],
@@ -1617,6 +1761,26 @@ export default function ADHDeedsApp() {
       return { ...old, ui: { ...(old.ui || {}), todayOrder: nextOrder } };
     });
   }
+  function reorderWeekSection(sourceId, targetId) {
+    if (!sourceId || !targetId || sourceId === targetId) return;
+    setData((old) => {
+      const current = old.ui?.weekOrder || WEEK_SECTION_ORDER;
+      const withoutSource = current.filter((id) => id !== sourceId);
+      const targetIndex = withoutSource.indexOf(targetId);
+      if (targetIndex < 0) return old;
+      const nextOrder = [...withoutSource.slice(0, targetIndex), sourceId, ...withoutSource.slice(targetIndex)];
+      return { ...old, ui: { ...(old.ui || {}), weekOrder: nextOrder } };
+    });
+  }
+  function toggleFeature(featureId) {
+    setData((old) => {
+      const current = old.ui?.hiddenFeatures || [];
+      const hiddenFeatures = current.includes(featureId)
+        ? current.filter((item) => item !== featureId)
+        : [...current, featureId];
+      return { ...old, ui: { ...(old.ui || {}), hiddenFeatures } };
+    });
+  }
   async function openReframeTask(task) {
     const fallback = {
       task,
@@ -1721,8 +1885,8 @@ export default function ADHDeedsApp() {
             <button key={tab.id} onClick={() => setView(tab.id)} className={`rounded-full px-5 py-2.5 text-sm font-semibold ${view === tab.id ? "bg-[#112849] text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>{tab.label}</button>
           ))}
         </div>
-        {view === "today" && <TodayView today={today} tasks={weekTasks} habits={data.habits} aiAccessToken={session?.access_token} todaySectionOrder={todaySectionOrder} onReorderSection={reorderTodaySection} onToggleTask={toggleTask} onToggleHabit={toggleHabit} onEditTask={openEditTask} onAddTask={openAddTask} onReframeTask={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} nudges={categoryNudges} points={points} progress={todayProgress} />}
-        {view === "week" && <WeekView days={days} tasks={weekTasks} onToggle={toggleTask} onEdit={openEditTask} onAddTask={openAddTask} onReframe={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} onMoveTask={moveTask} today={today} points={points} taskPoints={taskPoints} habitPoints={habitPoints} nudges={categoryNudges} />}
+        {view === "today" && <TodayView today={today} tasks={weekTasks} habits={data.habits} brainDump={data.brainDump || []} categories={categories} hiddenFeatures={hiddenFeatures} aiAccessToken={session?.access_token} todaySectionOrder={todaySectionOrder} onReorderSection={reorderTodaySection} onToggleTask={toggleTask} onToggleHabit={toggleHabit} onEditTask={openEditTask} onAddTask={openAddTask} onAddBrainDumpItems={addBrainDumpItems} onRemoveBrainDumpItem={removeBrainDumpItem} onConvertBrainDumpItem={convertBrainDumpItem} onAddCategory={() => setCategorySheetOpen(true)} onReframeTask={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} nudges={categoryNudges} points={points} progress={todayProgress} />}
+        {view === "week" && <WeekView days={days} tasks={weekTasks} weekSectionOrder={weekSectionOrder} hiddenFeatures={hiddenFeatures} onReorderSection={reorderWeekSection} onToggle={toggleTask} onEdit={openEditTask} onAddTask={openAddTask} onReframe={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} onMoveTask={moveTask} today={today} points={points} taskPoints={taskPoints} habitPoints={habitPoints} nudges={categoryNudges} />}
         {view === "dumpster" && <BrainDumpsterView items={data.brainDump || []} categories={categories} onAddItems={addBrainDumpItems} onRemoveItem={removeBrainDumpItem} onConvertItem={convertBrainDumpItem} onAddCategory={() => setCategorySheetOpen(true)} />}
         {view === "habits" && <HabitsView days={days} habits={data.habits} onToggle={toggleHabit} onAdd={openAddHabit} onEdit={openEditHabit} onRemove={removeHabit} />}
         {view === "tasks" && <AllTasksView tasks={weekTasks} categories={categories} onAddCategory={() => setCategorySheetOpen(true)} onToggle={toggleTask} onRemove={removeTask} onAdd={openAddTask} onEdit={openEditTask} onReframe={openReframeTask} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} />}
@@ -1731,7 +1895,7 @@ export default function ADHDeedsApp() {
       <AddTaskSheet open={sheetOpen} onClose={closeSheet} onSave={addTask} onUpdate={updateTask} days={days} task={editingTask} initialDate={newTaskDate} initialName={brainTaskDraft?.text || ""} categories={categories} onAddCategory={() => setCategorySheetOpen(true)} />
       <HabitSheet open={habitSheetOpen} onClose={closeHabitSheet} onSave={addHabit} onUpdate={updateHabit} habit={editingHabit} />
       <CategorySheet open={categorySheetOpen} onClose={() => setCategorySheetOpen(false)} onSave={addCategory} />
-      <ProfileSheet open={profileOpen} onClose={() => setProfileOpen(false)} session={session} authLoading={authLoading} syncStatus={syncStatus} notificationsEnabled={notificationsEnabled} notificationSupported={notificationSupported} onEnableNotifications={enableNotifications} onGoogleSignIn={signInWithGoogle} onSignIn={signIn} onSignOut={signOut} />
+      <ProfileSheet open={profileOpen} onClose={() => setProfileOpen(false)} session={session} authLoading={authLoading} syncStatus={syncStatus} notificationsEnabled={notificationsEnabled} notificationSupported={notificationSupported} hiddenFeatures={hiddenFeatures} onToggleFeature={toggleFeature} onEnableNotifications={enableNotifications} onGoogleSignIn={signInWithGoogle} onSignIn={signIn} onSignOut={signOut} />
       <AISheet insight={aiInsight} onClose={() => setAiInsight(null)} onAddFirstStep={addFirstStepTask} />
       <AIToast message={rescheduleAdvice} onClose={() => setRescheduleAdvice("")} />
     </div>
