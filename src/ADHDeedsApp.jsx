@@ -325,7 +325,7 @@ function TaskRow({ task, onToggle, onRemove, onEdit, onReframe, onMoveTomorrow, 
       layout
       draggable={!!onDragStart}
       onDragStart={(event) => onDragStart?.(event, task.id)}
-      className={`group relative flex items-start gap-3 rounded-xl ${compact ? "p-2" : "p-3"} ${onDragStart ? "cursor-grab active:cursor-grabbing" : ""} hover:bg-slate-50`}
+      className={`group/task relative flex items-start gap-3 rounded-xl ${compact ? "p-2" : "p-3"} ${onDragStart ? "cursor-grab active:cursor-grabbing" : ""} hover:bg-slate-50`}
     >
       <button
         onClick={(event) => { event.stopPropagation(); onToggle(task.id); }}
@@ -374,7 +374,7 @@ function TaskRow({ task, onToggle, onRemove, onEdit, onReframe, onMoveTomorrow, 
         </div>
       </div>
       {(onEdit || onReframe || onMoveTomorrow || onMoveTomorrowPenalty || onRemove) && (
-        <div className={`${compact ? "absolute right-1 top-1 rounded-lg bg-white/95 shadow-sm ring-1 ring-slate-200" : "flex shrink-0"} flex items-center gap-1 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100`}>
+        <div className={`${compact ? "absolute right-1 top-1 rounded-lg bg-white/95 shadow-sm ring-1 ring-slate-200" : "flex shrink-0"} flex items-center gap-1 opacity-100 transition sm:opacity-0 sm:group-hover/task:opacity-100`}>
           {onReframe && (
             <button onClick={(event) => { event.stopPropagation(); onReframe(task); }} className="grid h-7 w-7 place-items-center rounded-lg text-slate-400 hover:bg-blue-50 hover:text-[#3577DE]" aria-label="Reframe task" title="Reframe">
               <Sparkles size={14} />
