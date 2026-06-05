@@ -81,6 +81,7 @@ const RECURRENCE_OPTIONS = [
 ];
 const TODAY_SECTION_ORDER = ["plan", "tasks", "dumpster", "nudges", "habits"];
 const WEEK_SECTION_ORDER = ["stats", "nudges", "tasks"];
+const SECTION_WIDTHS = ["full", "half"];
 const FEATURE_OPTIONS = [
   { id: "stats", label: "Stats" },
   { id: "dailyPlan", label: "Daily plan" },
@@ -109,6 +110,15 @@ function normalizeWebsite(value) {
   const trimmed = String(value || "").trim();
   if (!trimmed) return "";
   return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+function normalizeSectionWidths(raw, allowedSections) {
+  if (!raw || typeof raw !== "object") return {};
+  return Object.fromEntries(
+    Object.entries(raw).filter(([id, width]) => allowedSections.includes(id) && SECTION_WIDTHS.includes(width))
+  );
+}
+function sectionWidthClass(id, widths, extra = "") {
+  return `${widths?.[id] === "half" ? "lg:col-span-1" : "lg:col-span-2"} ${extra}`;
 }
 function pretty(date, options = { day: "numeric", month: "short" }) {
   return date.toLocaleDateString("en-GB", options);
@@ -164,7 +174,7 @@ function seedData() {
     brainDump: [],
     categories: DEFAULT_CATEGORIES,
     recurringTasks: [],
-    ui: { todayOrder: TODAY_SECTION_ORDER, weekOrder: WEEK_SECTION_ORDER, hiddenFeatures: [] },
+    ui: { todayOrder: TODAY_SECTION_ORDER, weekOrder: WEEK_SECTION_ORDER, todayWidths: {}, weekWidths: {}, hiddenFeatures: [] },
   };
 }
 function normalizeData(raw) {
@@ -197,6 +207,8 @@ function normalizeData(raw) {
   const hiddenFeatures = Array.isArray(raw.ui?.hiddenFeatures)
     ? raw.ui.hiddenFeatures.filter((item) => FEATURE_OPTIONS.some((option) => option.id === item))
     : [];
+  const todayWidths = normalizeSectionWidths(raw.ui?.todayWidths, TODAY_SECTION_ORDER);
+  const weekWidths = normalizeSectionWidths(raw.ui?.weekWidths, WEEK_SECTION_ORDER);
   const recurringCategories = recurringTasks.map((task) => task.category).filter(Boolean);
   const categories = [...rawCategories, ...taskCategories, ...recurringCategories]
     .map((category) => String(category).trim())
@@ -207,7 +219,7 @@ function normalizeData(raw) {
     habits,
     brainDump,
     recurringTasks,
-    ui: { ...(raw.ui || {}), todayOrder, weekOrder, hiddenFeatures },
+    ui: { ...(raw.ui || {}), todayOrder, weekOrder, todayWidths, weekWidths, hiddenFeatures },
     categories: [...new Set(categories)].sort((a, b) => a.localeCompare(b)),
   };
 }
@@ -494,7 +506,7 @@ function AuthPanel({ session, authLoading, syncStatus, onGoogleSignIn, onSignIn,
   );
 }
 
-function ProfileSheet({ open, onClose, session, authLoading, syncStatus, notificationsEnabled, notificationSupported, hiddenFeatures, onToggleFeature, onEnableNotifications, onGoogleSignIn, onSignIn, onSignOut }) {
+function ProfileSheet({ open, onClose, session, authLoading, syncStatus, notificationsEnabled, notificationSupported, hiddenFeatures, onToggleFeature, onResetLayout, onEnableNotifications, onGoogleSignIn, onSignIn, onSignOut }) {
   const [customiseOpen, setCustomiseOpen] = useState(false);
   return (
     <AnimatePresence>
@@ -527,6 +539,10 @@ function ProfileSheet({ open, onClose, session, authLoading, syncStatus, notific
                       </button>
                     );
                   })}
+                  <button onClick={onResetLayout} className="flex w-full items-center justify-between rounded-xl bg-blue-50 px-3 py-2 text-sm font-semibold text-[#3577DE] ring-1 ring-blue-100">
+                    <span>Reset screen layout</span>
+                    <Settings2 size={15} />
+                  </button>
                 </div>
               )}
             </div>
@@ -758,6 +774,14 @@ function DailyPlanCard({ today, tasks, habits, aiAccessToken }) {
 function TodaySection({ id, children, onMove, className = "" }) {
   const [dragOver, setDragOver] = useState(false);
 
+  function dropPlacement(event) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = (event.clientX - rect.left) / rect.width;
+    if (x < 0.35) return "half-before";
+    if (x > 0.65) return "half-after";
+    return "full-before";
+  }
+
   return (
     <motion.div
       layout
@@ -776,7 +800,7 @@ function TodaySection({ id, children, onMove, className = "" }) {
       onDrop={(event) => {
         event.preventDefault();
         setDragOver(false);
-        onMove(event.dataTransfer.getData("application/x-today-section"), id);
+        onMove(event.dataTransfer.getData("application/x-today-section"), id, dropPlacement(event));
       }}
       className={`group cursor-grab rounded-2xl transition active:cursor-grabbing ${className} ${dragOver ? "ring-2 ring-[#3577DE] ring-offset-2 ring-offset-[#F3F6FB]" : ""}`}
     >
@@ -785,7 +809,7 @@ function TodaySection({ id, children, onMove, className = "" }) {
   );
 }
 
-function TodayView({ today, tasks, habits, brainDump, categories, hiddenFeatures, aiAccessToken, todaySectionOrder, onReorderSection, onToggleTask, onToggleHabit, onEditTask, onAddTask, onAddBrainDumpItems, onRemoveBrainDumpItem, onConvertBrainDumpItem, onAddCategory, onReframeTask, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, nudges, points, progress }) {
+function TodayView({ today, tasks, habits, brainDump, categories, hiddenFeatures, aiAccessToken, todaySectionOrder, todaySectionWidths, onReorderSection, onToggleTask, onToggleHabit, onEditTask, onAddTask, onAddBrainDumpItems, onRemoveBrainDumpItem, onConvertBrainDumpItem, onAddCategory, onReframeTask, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, nudges, points, progress }) {
   const todaysTasks = tasks.filter((t) => t.date === isoDate(today));
   const sections = {
     plan: {
@@ -869,9 +893,9 @@ function TodayView({ today, tasks, habits, brainDump, categories, hiddenFeatures
           <Flame size={16} className="text-[#6EA8FF]" /> <strong className="text-white">{points}</strong> points this week
         </div>
       </div>
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {visibleOrder.map((id) => (
-          <TodaySection key={id} id={id} onMove={onReorderSection}>
+          <TodaySection key={id} id={id} onMove={onReorderSection} className={sectionWidthClass(id, todaySectionWidths)}>
             {sections[id].content}
           </TodaySection>
         ))}
@@ -974,7 +998,7 @@ function MobileWeekTask({ task, days, onToggle, onEdit, onReframe, onMoveTask, o
   );
 }
 
-function WeekView({ days, tasks, weekSectionOrder, hiddenFeatures, onReorderSection, onToggle, onEdit, onAddTask, onReframe, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, onMoveTask, today, points, taskPoints, habitPoints, nudges }) {
+function WeekView({ days, tasks, weekSectionOrder, weekSectionWidths, hiddenFeatures, onReorderSection, onToggle, onEdit, onAddTask, onReframe, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, onMoveTask, today, points, taskPoints, habitPoints, nudges }) {
   const initialDay = days.find((day) => isoDate(day) === isoDate(today)) || days[0];
   const [selectedDay, setSelectedDay] = useState(isoDate(initialDay));
   const done = tasks.filter((t) => t.done).length;
@@ -1001,7 +1025,6 @@ function WeekView({ days, tasks, weekSectionOrder, hiddenFeatures, onReorderSect
       content: <CategoryNudges nudges={nudges} onAskOpinion={onAskOpinion} />,
     },
     tasks: {
-      className: "lg:col-span-2",
       content: (
         <div className="space-y-5">
           <div className="flex items-center justify-between lg:hidden">
@@ -1085,9 +1108,9 @@ function WeekView({ days, tasks, weekSectionOrder, hiddenFeatures, onReorderSect
   });
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-5 pb-24">
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {visibleOrder.map((id) => (
-          <TodaySection key={id} id={id} onMove={onReorderSection} className={sections[id].className || ""}>
+          <TodaySection key={id} id={id} onMove={onReorderSection} className={sectionWidthClass(id, weekSectionWidths, sections[id].className || "")}>
             {sections[id].content}
           </TodaySection>
         ))}
@@ -1602,6 +1625,8 @@ export default function ADHDeedsApp() {
   const todayProgress = todayTasks.length ? Math.round((todayTasks.filter((task) => task.done).length / todayTasks.length) * 100) : 0;
   const todaySectionOrder = data.ui?.todayOrder || TODAY_SECTION_ORDER;
   const weekSectionOrder = data.ui?.weekOrder || WEEK_SECTION_ORDER;
+  const todaySectionWidths = data.ui?.todayWidths || {};
+  const weekSectionWidths = data.ui?.weekWidths || {};
   const hiddenFeatures = data.ui?.hiddenFeatures || [];
   const categories = data.categories || [];
   const categoryNudges = categories.map((category) => {
@@ -1750,27 +1775,49 @@ export default function ADHDeedsApp() {
       return { ...old, categories: [...existing, name].sort((a, b) => a.localeCompare(b)) };
     });
   }
-  function reorderTodaySection(sourceId, targetId) {
+  function reorderSections(current, sourceId, targetId, placement) {
+    const withoutSource = current.filter((id) => id !== sourceId);
+    const targetIndex = withoutSource.indexOf(targetId);
+    if (targetIndex < 0) return current;
+    const insertAfter = placement === "half-after";
+    const insertIndex = insertAfter ? targetIndex + 1 : targetIndex;
+    return [...withoutSource.slice(0, insertIndex), sourceId, ...withoutSource.slice(insertIndex)];
+  }
+  function nextWidths(current, sourceId, targetId, placement) {
+    if (placement === "half-before" || placement === "half-after") {
+      return { ...current, [sourceId]: "half", [targetId]: "half" };
+    }
+    return { ...current, [sourceId]: "full" };
+  }
+  function reorderTodaySection(sourceId, targetId, placement = "full-before") {
     if (!sourceId || !targetId || sourceId === targetId) return;
     setData((old) => {
       const current = old.ui?.todayOrder || TODAY_SECTION_ORDER;
-      const withoutSource = current.filter((id) => id !== sourceId);
-      const targetIndex = withoutSource.indexOf(targetId);
-      if (targetIndex < 0) return old;
-      const nextOrder = [...withoutSource.slice(0, targetIndex), sourceId, ...withoutSource.slice(targetIndex)];
-      return { ...old, ui: { ...(old.ui || {}), todayOrder: nextOrder } };
+      const nextOrder = reorderSections(current, sourceId, targetId, placement);
+      const todayWidths = nextWidths(old.ui?.todayWidths || {}, sourceId, targetId, placement);
+      return { ...old, ui: { ...(old.ui || {}), todayOrder: nextOrder, todayWidths } };
     });
   }
-  function reorderWeekSection(sourceId, targetId) {
+  function reorderWeekSection(sourceId, targetId, placement = "full-before") {
     if (!sourceId || !targetId || sourceId === targetId) return;
     setData((old) => {
       const current = old.ui?.weekOrder || WEEK_SECTION_ORDER;
-      const withoutSource = current.filter((id) => id !== sourceId);
-      const targetIndex = withoutSource.indexOf(targetId);
-      if (targetIndex < 0) return old;
-      const nextOrder = [...withoutSource.slice(0, targetIndex), sourceId, ...withoutSource.slice(targetIndex)];
-      return { ...old, ui: { ...(old.ui || {}), weekOrder: nextOrder } };
+      const nextOrder = reorderSections(current, sourceId, targetId, placement);
+      const weekWidths = nextWidths(old.ui?.weekWidths || {}, sourceId, targetId, placement);
+      return { ...old, ui: { ...(old.ui || {}), weekOrder: nextOrder, weekWidths } };
     });
+  }
+  function resetScreenLayout() {
+    setData((old) => ({
+      ...old,
+      ui: {
+        ...(old.ui || {}),
+        todayOrder: TODAY_SECTION_ORDER,
+        weekOrder: WEEK_SECTION_ORDER,
+        todayWidths: {},
+        weekWidths: {},
+      },
+    }));
   }
   function toggleFeature(featureId) {
     setData((old) => {
@@ -1885,8 +1932,8 @@ export default function ADHDeedsApp() {
             <button key={tab.id} onClick={() => setView(tab.id)} className={`rounded-full px-5 py-2.5 text-sm font-semibold ${view === tab.id ? "bg-[#112849] text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>{tab.label}</button>
           ))}
         </div>
-        {view === "today" && <TodayView today={today} tasks={weekTasks} habits={data.habits} brainDump={data.brainDump || []} categories={categories} hiddenFeatures={hiddenFeatures} aiAccessToken={session?.access_token} todaySectionOrder={todaySectionOrder} onReorderSection={reorderTodaySection} onToggleTask={toggleTask} onToggleHabit={toggleHabit} onEditTask={openEditTask} onAddTask={openAddTask} onAddBrainDumpItems={addBrainDumpItems} onRemoveBrainDumpItem={removeBrainDumpItem} onConvertBrainDumpItem={convertBrainDumpItem} onAddCategory={() => setCategorySheetOpen(true)} onReframeTask={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} nudges={categoryNudges} points={points} progress={todayProgress} />}
-        {view === "week" && <WeekView days={days} tasks={weekTasks} weekSectionOrder={weekSectionOrder} hiddenFeatures={hiddenFeatures} onReorderSection={reorderWeekSection} onToggle={toggleTask} onEdit={openEditTask} onAddTask={openAddTask} onReframe={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} onMoveTask={moveTask} today={today} points={points} taskPoints={taskPoints} habitPoints={habitPoints} nudges={categoryNudges} />}
+        {view === "today" && <TodayView today={today} tasks={weekTasks} habits={data.habits} brainDump={data.brainDump || []} categories={categories} hiddenFeatures={hiddenFeatures} aiAccessToken={session?.access_token} todaySectionOrder={todaySectionOrder} todaySectionWidths={todaySectionWidths} onReorderSection={reorderTodaySection} onToggleTask={toggleTask} onToggleHabit={toggleHabit} onEditTask={openEditTask} onAddTask={openAddTask} onAddBrainDumpItems={addBrainDumpItems} onRemoveBrainDumpItem={removeBrainDumpItem} onConvertBrainDumpItem={convertBrainDumpItem} onAddCategory={() => setCategorySheetOpen(true)} onReframeTask={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} nudges={categoryNudges} points={points} progress={todayProgress} />}
+        {view === "week" && <WeekView days={days} tasks={weekTasks} weekSectionOrder={weekSectionOrder} weekSectionWidths={weekSectionWidths} hiddenFeatures={hiddenFeatures} onReorderSection={reorderWeekSection} onToggle={toggleTask} onEdit={openEditTask} onAddTask={openAddTask} onReframe={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} onMoveTask={moveTask} today={today} points={points} taskPoints={taskPoints} habitPoints={habitPoints} nudges={categoryNudges} />}
         {view === "dumpster" && <BrainDumpsterView items={data.brainDump || []} categories={categories} onAddItems={addBrainDumpItems} onRemoveItem={removeBrainDumpItem} onConvertItem={convertBrainDumpItem} onAddCategory={() => setCategorySheetOpen(true)} />}
         {view === "habits" && <HabitsView days={days} habits={data.habits} onToggle={toggleHabit} onAdd={openAddHabit} onEdit={openEditHabit} onRemove={removeHabit} />}
         {view === "tasks" && <AllTasksView tasks={weekTasks} categories={categories} onAddCategory={() => setCategorySheetOpen(true)} onToggle={toggleTask} onRemove={removeTask} onAdd={openAddTask} onEdit={openEditTask} onReframe={openReframeTask} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} />}
@@ -1895,7 +1942,7 @@ export default function ADHDeedsApp() {
       <AddTaskSheet open={sheetOpen} onClose={closeSheet} onSave={addTask} onUpdate={updateTask} days={days} task={editingTask} initialDate={newTaskDate} initialName={brainTaskDraft?.text || ""} categories={categories} onAddCategory={() => setCategorySheetOpen(true)} />
       <HabitSheet open={habitSheetOpen} onClose={closeHabitSheet} onSave={addHabit} onUpdate={updateHabit} habit={editingHabit} />
       <CategorySheet open={categorySheetOpen} onClose={() => setCategorySheetOpen(false)} onSave={addCategory} />
-      <ProfileSheet open={profileOpen} onClose={() => setProfileOpen(false)} session={session} authLoading={authLoading} syncStatus={syncStatus} notificationsEnabled={notificationsEnabled} notificationSupported={notificationSupported} hiddenFeatures={hiddenFeatures} onToggleFeature={toggleFeature} onEnableNotifications={enableNotifications} onGoogleSignIn={signInWithGoogle} onSignIn={signIn} onSignOut={signOut} />
+      <ProfileSheet open={profileOpen} onClose={() => setProfileOpen(false)} session={session} authLoading={authLoading} syncStatus={syncStatus} notificationsEnabled={notificationsEnabled} notificationSupported={notificationSupported} hiddenFeatures={hiddenFeatures} onToggleFeature={toggleFeature} onResetLayout={resetScreenLayout} onEnableNotifications={enableNotifications} onGoogleSignIn={signInWithGoogle} onSignIn={signIn} onSignOut={signOut} />
       <AISheet insight={aiInsight} onClose={() => setAiInsight(null)} onAddFirstStep={addFirstStepTask} />
       <AIToast message={rescheduleAdvice} onClose={() => setRescheduleAdvice("")} />
     </div>
