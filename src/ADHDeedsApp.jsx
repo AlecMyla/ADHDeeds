@@ -15,6 +15,7 @@ import {
   Pencil,
   Plus,
   ArrowRight,
+  ListChecks,
   Settings2,
   Sparkles,
   SquarePen,
@@ -110,6 +111,27 @@ function normalizeWebsite(value) {
   if (!trimmed) return "";
   return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
 }
+function normalizeChecklist(items) {
+  if (!Array.isArray(items)) return [];
+  return items
+    .map((item, index) => {
+      const text = String(item?.text || item || "").trim();
+      if (!text) return null;
+      return {
+        id: item?.id || `check-${Date.now()}-${index}`,
+        text,
+        done: !!item?.done,
+      };
+    })
+    .filter(Boolean);
+}
+function checklistStats(task) {
+  const checklist = normalizeChecklist(task?.checklist);
+  return {
+    total: checklist.length,
+    done: checklist.filter((item) => item.done).length,
+  };
+}
 function normalizeSectionWidths(raw, allowedSections) {
   if (!raw || typeof raw !== "object") return {};
   return Object.fromEntries(
@@ -153,6 +175,7 @@ function taskFromRecurring(template, dateKey) {
     important: template.important,
     notes: template.notes || "",
     website: template.website || "",
+    checklist: normalizeChecklist(template.checklist),
   };
 }
 function categoryStyle(category) {
@@ -180,7 +203,9 @@ function normalizeData(raw) {
   const fallback = seedData();
   if (!raw || typeof raw !== "object") return fallback;
   const tasks = Array.isArray(raw.tasks)
-    ? raw.tasks.filter((task) => !LEGACY_SAMPLE_TASK_NAMES.has(task.name))
+    ? raw.tasks
+      .filter((task) => !LEGACY_SAMPLE_TASK_NAMES.has(task.name))
+      .map((task) => ({ ...task, checklist: normalizeChecklist(task.checklist) }))
     : [];
   const habits = Array.isArray(raw.habits)
     ? raw.habits.filter((habit) => !LEGACY_SAMPLE_HABIT_IDS.has(habit.id) && !LEGACY_SAMPLE_HABIT_NAMES.has(habit.name))
@@ -195,7 +220,9 @@ function normalizeData(raw) {
   const taskCategories = tasks.map((task) => task.category).filter(Boolean);
   const rawCategories = Array.isArray(raw.categories) ? raw.categories : [];
   const recurringTasks = Array.isArray(raw.recurringTasks)
-    ? raw.recurringTasks.filter((item) => item?.id && item?.frequency && item?.startDate)
+    ? raw.recurringTasks
+      .filter((item) => item?.id && item?.frequency && item?.startDate)
+      .map((item) => ({ ...item, checklist: normalizeChecklist(item.checklist) }))
     : [];
   const todayOrder = Array.isArray(raw.ui?.todayOrder)
     ? [...raw.ui.todayOrder.filter((item) => TODAY_SECTION_ORDER.includes(item)), ...TODAY_SECTION_ORDER].filter((item, index, list) => list.indexOf(item) === index)
@@ -319,6 +346,9 @@ function TaskRow({ task, onToggle, onRemove, onEdit, onReframe, onMoveTomorrow, 
   const [noteOpen, setNoteOpen] = useState(false);
   const touchTimer = useRef(null);
   const website = normalizeWebsite(task.website);
+  const listStats = checklistStats(task);
+  const hasChecklist = listStats.total > 0;
+  const checklistComplete = !hasChecklist || listStats.done === listStats.total;
   return (
     <motion.div
       layout
@@ -328,10 +358,11 @@ function TaskRow({ task, onToggle, onRemove, onEdit, onReframe, onMoveTomorrow, 
     >
       <button
         onClick={(event) => { event.stopPropagation(); onToggle(task.id); }}
-        aria-label={task.done ? "Mark incomplete" : "Complete task"}
+        disabled={!task.done && hasChecklist && !checklistComplete}
+        aria-label={!task.done && hasChecklist && !checklistComplete ? "Complete checklist items first" : task.done ? "Mark incomplete" : "Complete task"}
         className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md border transition ${
           task.done ? "border-[#3577DE] bg-[#3577DE] text-white" : "border-slate-300 bg-white text-transparent"
-        }`}
+        } disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-transparent disabled:opacity-60`}
       >
         <Check size={13} strokeWidth={3} />
       </button>
@@ -368,6 +399,7 @@ function TaskRow({ task, onToggle, onRemove, onEdit, onReframe, onMoveTomorrow, 
         <div className="mt-1 flex flex-wrap items-center gap-1.5">
           <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${categoryStyle(task.category)}`}>{task.category}</span>
           <span className="text-[11px] font-medium text-slate-400">{task.points} pts</span>
+          {hasChecklist && <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600"><ListChecks size={11} /> {listStats.done}/{listStats.total}</span>}
           {task.recurringId && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">Repeats</span>}
           {task.important && !task.done && <span className="rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-semibold text-orange-700">Important</span>}
         </div>
@@ -1285,7 +1317,7 @@ function AllTasksView({ tasks, categories, onAddCategory, onToggle, onRemove, on
   );
 }
 
-function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate, initialName = "", categories, onAddCategory }) {
+function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate, initialName = "", categories, onAddCategory, aiAccessToken }) {
   const [name, setName] = useState("");
   const [category, setCategory] = useState(categories[0] || "");
   const [date, setDate] = useState(isoDate(days[0]));
@@ -1295,6 +1327,9 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
   const [website, setWebsite] = useState("");
   const [recurrence, setRecurrence] = useState("none");
   const [breakdown, setBreakdown] = useState([]);
+  const [checklistOpen, setChecklistOpen] = useState(false);
+  const [checklist, setChecklist] = useState([]);
+  const [checklistStatus, setChecklistStatus] = useState("");
   useEffect(() => {
     if (!open) return;
     setName(task?.name || initialName);
@@ -1306,6 +1341,10 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
     setWebsite(task?.website || "");
     setRecurrence("none");
     setBreakdown([]);
+    const savedChecklist = normalizeChecklist(task?.checklist);
+    setChecklist(savedChecklist);
+    setChecklistOpen(!!savedChecklist.length);
+    setChecklistStatus("");
   }, [open, days, task, initialDate, initialName, categories]);
   useEffect(() => {
     if (open && !category && categories.length) setCategory(categories[0]);
@@ -1313,12 +1352,14 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
   function submit(event) {
     event.preventDefault();
     if (!name.trim()) return;
+    const cleanChecklist = normalizeChecklist(checklist);
     if (task) {
-      onUpdate({ ...task, name: name.trim(), category, date, points, important, notes: notes.trim(), website: normalizeWebsite(website) });
+      const nextDone = cleanChecklist.length && cleanChecklist.some((item) => !item.done) ? false : task.done;
+      onUpdate({ ...task, name: name.trim(), category, date, points, important, notes: notes.trim(), website: normalizeWebsite(website), checklist: cleanChecklist, done: nextDone });
     } else {
-      onSave({ id: `task-${Date.now()}`, name: name.trim(), category, date, points, done: false, important, notes: notes.trim(), website: normalizeWebsite(website), recurrence });
+      onSave({ id: `task-${Date.now()}`, name: name.trim(), category, date, points, done: false, important, notes: notes.trim(), website: normalizeWebsite(website), checklist: cleanChecklist, recurrence });
     }
-    setName(""); setCategory(categories[0] || ""); setPoints(10); setImportant(false); setNotes(""); setWebsite(""); setRecurrence("none"); onClose();
+    setName(""); setCategory(categories[0] || ""); setPoints(10); setImportant(false); setNotes(""); setWebsite(""); setRecurrence("none"); setChecklist([]); setChecklistOpen(false); setChecklistStatus(""); onClose();
   }
   function createBreakdown() {
     if (!name.trim()) return;
@@ -1328,12 +1369,46 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
     breakdown.forEach((item, index) => onSave({ ...item, id: `task-${Date.now()}-${index}`, done: false }));
     onClose();
   }
+  function addChecklistItem(text = "") {
+    setChecklist((items) => [...items, { id: `check-${Date.now()}-${items.length}`, text, done: false }]);
+  }
+  function updateChecklistItem(id, updates) {
+    setChecklist((items) => items.map((item) => item.id === id ? { ...item, ...updates } : item));
+  }
+  function removeChecklistItem(id) {
+    setChecklist((items) => items.filter((item) => item.id !== id));
+  }
+  async function suggestChecklist() {
+    if (!name.trim()) return;
+    setChecklistStatus("Suggesting...");
+    try {
+      const result = await askAI("checklist", {
+        task: {
+          name: name.trim(),
+          notes: notes.trim(),
+          category,
+          existingItems: normalizeChecklist(checklist).map((item) => item.text),
+        },
+      }, aiAccessToken);
+      const suggested = normalizeChecklist(result.items || []).map((item, index) => ({
+        ...item,
+        id: `check-ai-${Date.now()}-${index}`,
+        done: false,
+      }));
+      if (!suggested.length) throw new Error("No checklist items returned.");
+      setChecklist((items) => [...items, ...suggested]);
+      setChecklistOpen(true);
+      setChecklistStatus("Suggestions added as draft items.");
+    } catch (error) {
+      setChecklistStatus(error.message || "AI checklist suggestions are unavailable right now.");
+    }
+  }
   return (
     <AnimatePresence>
       {open && (
         <>
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="fixed inset-0 z-40 bg-slate-950/40" />
-          <motion.form onSubmit={submit} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-x-0 bottom-0 z-50 rounded-t-[28px] bg-white px-5 pb-[max(1.4rem,env(safe-area-inset-bottom))] pt-4 shadow-2xl sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-[470px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-3xl sm:p-6">
+          <motion.form onSubmit={submit} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-x-0 bottom-0 z-50 max-h-[92vh] overflow-y-auto rounded-t-[28px] bg-white px-5 pb-[max(1.4rem,env(safe-area-inset-bottom))] pt-4 shadow-2xl sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-[470px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-3xl sm:p-6">
             <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-slate-200 sm:hidden" />
             <div className="mb-5 flex items-center justify-between"><h2 className="text-xl font-bold tracking-tight text-[#112849]">{task ? "Edit task" : "Add a task"}</h2><button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-slate-100 text-slate-500"><X size={18}/></button></div>
             <div className="space-y-4">
@@ -1354,6 +1429,33 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
               </div>
               <label className="block"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Notes</span><textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="Useful context, booking reference, what to ask..." className="w-full resize-none rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#3577DE]" /></label>
               <label className="block"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Website</span><input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="example.com" className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#3577DE]" /></label>
+              <div className="rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-200/70">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2 text-sm font-bold text-[#112849]"><ListChecks size={16} className="text-[#3577DE]" /> Checklist</div>
+                    <p className="mt-1 text-xs text-slate-400">The task completes when every item is checked.</p>
+                  </div>
+                  <button type="button" onClick={() => { setChecklistOpen(true); if (!checklist.length) addChecklistItem(); }} className="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-[#3577DE] ring-1 ring-blue-100">Create List</button>
+                </div>
+                {checklistOpen && (
+                  <div className="mt-3 space-y-2">
+                    {checklist.map((item) => (
+                      <div key={item.id} className="flex items-center gap-2 rounded-xl bg-white p-2 ring-1 ring-slate-200">
+                        <button type="button" onClick={() => updateChecklistItem(item.id, { done: !item.done })} className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg border ${item.done ? "border-[#3577DE] bg-[#3577DE] text-white" : "border-slate-300 text-transparent"}`} aria-label={item.done ? "Mark checklist item incomplete" : "Complete checklist item"}>
+                          <Check size={15} strokeWidth={3} />
+                        </button>
+                        <input value={item.text} onChange={(event) => updateChecklistItem(item.id, { text: event.target.value })} placeholder="Checklist item" className="min-w-0 flex-1 rounded-lg border border-transparent px-2 py-1.5 text-sm outline-none focus:border-[#3577DE]" />
+                        <button type="button" onClick={() => removeChecklistItem(item.id)} className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-500" aria-label="Remove checklist item"><X size={15} /></button>
+                      </div>
+                    ))}
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <button type="button" onClick={() => addChecklistItem()} className="rounded-xl bg-white py-2.5 text-sm font-semibold text-slate-600 ring-1 ring-slate-200">Add item</button>
+                      <button type="button" onClick={suggestChecklist} disabled={!name.trim()} className="flex items-center justify-center gap-2 rounded-xl bg-blue-50 py-2.5 text-sm font-semibold text-[#3577DE] ring-1 ring-blue-100 disabled:bg-slate-100 disabled:text-slate-400 disabled:ring-slate-200"><Sparkles size={15} /> Suggest list with AI</button>
+                    </div>
+                    {checklistStatus && <p className="text-xs font-medium text-slate-400">{checklistStatus}</p>}
+                  </div>
+                )}
+              </div>
               {!task && (
                 <label className="block">
                   <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Repeat</span>
@@ -1671,7 +1773,17 @@ export default function ADHDeedsApp() {
     return task ? { category, task } : null;
   }).filter(Boolean);
 
-  function toggleTask(id) { setData((old) => ({ ...old, tasks: old.tasks.map((task) => task.id === id ? { ...task, done: !task.done } : task) })); }
+  function toggleTask(id) {
+    setData((old) => ({
+      ...old,
+      tasks: old.tasks.map((task) => {
+        if (task.id !== id) return task;
+        const stats = checklistStats(task);
+        if (!task.done && stats.total > 0 && stats.done < stats.total) return task;
+        return { ...task, done: !task.done };
+      }),
+    }));
+  }
   function removeTask(id) {
     setData((old) => {
       const task = old.tasks.find((item) => item.id === id);
@@ -1701,6 +1813,7 @@ export default function ADHDeedsApp() {
             important: task.important,
             notes: task.notes || "",
             website: task.website || "",
+            checklist: normalizeChecklist(task.checklist),
             skippedDates: [],
           },
         ],
@@ -1983,7 +2096,7 @@ export default function ADHDeedsApp() {
         {view === "tasks" && <AllTasksView tasks={weekTasks} categories={categories} onAddCategory={() => setCategorySheetOpen(true)} onToggle={toggleTask} onRemove={removeTask} onAdd={openAddTask} onEdit={openEditTask} onReframe={openReframeTask} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} />}
       </main>
       <BottomNav view={view} setView={setView} />
-      <AddTaskSheet open={sheetOpen} onClose={closeSheet} onSave={addTask} onUpdate={updateTask} days={days} task={editingTask} initialDate={newTaskDate} initialName={brainTaskDraft?.text || ""} categories={categories} onAddCategory={() => setCategorySheetOpen(true)} />
+      <AddTaskSheet open={sheetOpen} onClose={closeSheet} onSave={addTask} onUpdate={updateTask} days={days} task={editingTask} initialDate={newTaskDate} initialName={brainTaskDraft?.text || ""} categories={categories} onAddCategory={() => setCategorySheetOpen(true)} aiAccessToken={session?.access_token} />
       <HabitSheet open={habitSheetOpen} onClose={closeHabitSheet} onSave={addHabit} onUpdate={updateHabit} habit={editingHabit} />
       <CategorySheet open={categorySheetOpen} onClose={() => setCategorySheetOpen(false)} onSave={addCategory} />
       <ProfileSheet open={profileOpen} onClose={() => setProfileOpen(false)} session={session} authLoading={authLoading} syncStatus={syncStatus} notificationsEnabled={notificationsEnabled} notificationSupported={notificationSupported} hiddenFeatures={hiddenFeatures} onToggleFeature={toggleFeature} onResetLayout={resetScreenLayout} onEnableNotifications={enableNotifications} onGoogleSignIn={signInWithGoogle} onSignIn={signIn} onSignOut={signOut} />

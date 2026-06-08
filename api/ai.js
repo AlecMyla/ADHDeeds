@@ -38,6 +38,16 @@ Task: ${JSON.stringify(payload.task)}
 Nearby context: ${JSON.stringify(payload.context || {})}`;
   }
 
+  if (type === "checklist") {
+    return `${shared}
+Return JSON shaped exactly like {"items":["..."]}.
+Create a practical checklist for this task.
+Use 5 to 12 short checklist items.
+Do not repeat existing items.
+Avoid generic filler like "do task" or "finish it".
+Task: ${JSON.stringify(payload.task)}`;
+  }
+
   throw new Error("Unknown AI request type.");
 }
 
