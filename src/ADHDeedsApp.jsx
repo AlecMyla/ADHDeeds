@@ -953,13 +953,13 @@ function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, 
         <div className="flex justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="text-xs font-medium text-blue-100/70">{isToday ? "Today" : "Selected day"}</div>
-            <div className="mt-1 flex items-center gap-2">
-              <button onClick={onPreviousDay} className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-white/10 text-blue-100 hover:bg-white/15" aria-label="Previous day"><ChevronLeft size={18} /></button>
-              <button onClick={onJumpToday} disabled={isToday} className="min-w-0 text-left disabled:cursor-default" aria-label="Jump to today">
+            <div className="mt-1 grid max-w-sm grid-cols-[2.25rem_minmax(8rem,1fr)_2.25rem] items-center gap-3">
+              <button onClick={onPreviousDay} className="grid h-9 w-9 place-items-center rounded-xl bg-white/10 text-blue-100 hover:bg-white/15" aria-label="Previous day"><ChevronLeft size={18} /></button>
+              <button onClick={onJumpToday} disabled={isToday} className="min-w-0 text-center disabled:cursor-default" aria-label="Jump to today">
                 <h2 className="truncate text-2xl font-bold tracking-tight">{pretty(selectedDate, { weekday: "long" })}</h2>
                 <p className="text-sm text-blue-100/70">{pretty(selectedDate, { day: "numeric", month: "long" })}</p>
               </button>
-              <button onClick={onNextDay} className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-white/10 text-blue-100 hover:bg-white/15" aria-label="Next day"><ChevronRight size={18} /></button>
+              <button onClick={onNextDay} className="grid h-9 w-9 place-items-center rounded-xl bg-white/10 text-blue-100 hover:bg-white/15" aria-label="Next day"><ChevronRight size={18} /></button>
             </div>
           </div>
           <Ring value={progress} size={78} dark />
