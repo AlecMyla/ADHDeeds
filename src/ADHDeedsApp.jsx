@@ -1498,9 +1498,9 @@ function BottomNav({ view, setView }) {
     { id: "tasks", label: "Tasks", icon: BarChart3 },
   ];
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-20 mx-auto flex max-w-md items-center justify-between border-t border-slate-200 bg-white/95 px-5 pb-[max(.55rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur sm:hidden">
+    <nav className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+16px)] z-20 mx-auto flex max-w-[390px] items-center justify-between rounded-3xl border border-white/70 bg-white/75 px-4 py-2.5 shadow-[0_18px_45px_rgba(17,40,73,0.20)] ring-1 ring-slate-200/70 backdrop-blur-2xl sm:hidden">
       {tabs.map(({ id, label, icon: Icon }) => (
-        <button key={id} onClick={() => setView(id)} className={`flex min-w-[52px] flex-col items-center gap-1 text-[10px] font-semibold ${view === id ? "text-[#3577DE]" : "text-slate-400"}`}><Icon size={21}/><span>{label}</span></button>
+        <button key={id} onClick={() => setView(id)} className={`flex min-h-11 min-w-[52px] flex-col items-center justify-center gap-1 rounded-2xl text-[10px] font-semibold transition ${view === id ? "bg-white/80 text-[#3577DE] shadow-sm ring-1 ring-slate-200/70" : "text-slate-400 hover:bg-white/50"}`}><Icon size={21}/><span>{label}</span></button>
       ))}
     </nav>
   );
