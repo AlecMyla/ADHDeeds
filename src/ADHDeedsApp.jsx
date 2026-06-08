@@ -808,17 +808,21 @@ function TodaySection({ id, children, onMove, className = "" }) {
   );
 }
 
-function TodayView({ today, tasks, habits, brainDump, categories, hiddenFeatures, aiAccessToken, todaySectionOrder, todaySectionWidths, onReorderSection, onToggleTask, onToggleHabit, onEditTask, onAddTask, onAddBrainDumpItems, onRemoveBrainDumpItem, onConvertBrainDumpItem, onAddCategory, onReframeTask, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, nudges, points, progress }) {
-  const todaysTasks = tasks.filter((t) => t.date === isoDate(today));
+function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, hiddenFeatures, aiAccessToken, todaySectionOrder, todaySectionWidths, onPreviousDay, onNextDay, onJumpToday, onReorderSection, onToggleTask, onToggleHabit, onEditTask, onAddTask, onAddBrainDumpItems, onRemoveBrainDumpItem, onConvertBrainDumpItem, onAddCategory, onReframeTask, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, nudges, points, progress }) {
+  const selectedKey = isoDate(selectedDate);
+  const todayKey = isoDate(today);
+  const isToday = selectedKey === todayKey;
+  const touchStartX = useRef(null);
+  const todaysTasks = tasks.filter((t) => t.date === selectedKey);
   const sections = {
     plan: {
-      content: <DailyPlanCard today={today} tasks={tasks} habits={habits} aiAccessToken={aiAccessToken} />,
+      content: <DailyPlanCard today={selectedDate} tasks={tasks} habits={habits} aiAccessToken={aiAccessToken} />,
     },
     tasks: {
       content: (
         <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-slate-200/70">
           <div className="flex items-center justify-between px-2 pb-2 pt-1">
-            <h3 className="text-sm font-bold text-[#112849]">Today’s tasks</h3>
+            <h3 className="text-sm font-bold text-[#112849]">{isToday ? "Today’s tasks" : `${pretty(selectedDate, { weekday: "long" })} tasks`}</h3>
             <span className="text-xs text-slate-400">{todaysTasks.filter((t) => t.done).length} / {todaysTasks.length} complete</span>
           </div>
           <div className="divide-y divide-slate-100">
@@ -835,7 +839,7 @@ function TodayView({ today, tasks, habits, brainDump, categories, hiddenFeatures
               />
             )) : <p className="p-4 text-sm text-slate-400">Nothing planned today.</p>}
           </div>
-          <button onClick={() => onAddTask(isoDate(today))} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-50 py-3 text-sm font-semibold text-[#3577DE] ring-1 ring-blue-100 hover:bg-blue-100">
+          <button onClick={() => onAddTask(selectedKey)} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-50 py-3 text-sm font-semibold text-[#3577DE] ring-1 ring-blue-100 hover:bg-blue-100">
             <Plus size={16} /> Add task
           </button>
         </div>
@@ -850,12 +854,12 @@ function TodayView({ today, tasks, habits, brainDump, categories, hiddenFeatures
     habits: {
       content: (
         <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200/70">
-          <h3 className="mb-3 text-sm font-bold text-[#112849]">Today’s habits</h3>
+          <h3 className="mb-3 text-sm font-bold text-[#112849]">{isToday ? "Today’s habits" : `${pretty(selectedDate, { weekday: "long" })} habits`}</h3>
           <div className="space-y-2">
             {habits.map((habit) => {
-              const checked = !!habit.ticks[isoDate(today)];
+              const checked = !!habit.ticks[selectedKey];
               return (
-                <button key={habit.id} onClick={() => onToggleHabit(habit.id, isoDate(today))} className="flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left hover:bg-slate-50">
+                <button key={habit.id} onClick={() => onToggleHabit(habit.id, selectedKey)} className="flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left hover:bg-slate-50">
                   <span className={`grid h-6 w-6 place-items-center rounded-lg border ${checked ? "border-[#3577DE] bg-[#3577DE] text-white" : "border-slate-300 text-transparent"}`}><Check size={15} strokeWidth={3} /></span>
                   <div className="flex-1"><div className="text-sm font-medium text-slate-800">{habit.name}</div><div className="text-[11px] text-slate-400">{habit.detail}</div></div>
                   <span className="text-xs font-semibold text-slate-400">{habit.points} pts</span>
@@ -879,14 +883,30 @@ function TodayView({ today, tasks, habits, brainDump, categories, hiddenFeatures
 
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4 pb-24">
-      <div className="rounded-3xl bg-[#112849] p-5 text-white shadow-sm">
+      <div
+        className="rounded-3xl bg-[#112849] p-5 text-white shadow-sm"
+        onTouchStart={(event) => { touchStartX.current = event.touches[0]?.clientX ?? null; }}
+        onTouchEnd={(event) => {
+          if (touchStartX.current === null) return;
+          const delta = (event.changedTouches[0]?.clientX ?? touchStartX.current) - touchStartX.current;
+          touchStartX.current = null;
+          if (Math.abs(delta) < 45) return;
+          if (delta < 0) onNextDay();
+          else onPreviousDay();
+        }}
+      >
         <div className="flex justify-between">
           <div>
-            <div className="text-xs font-medium text-blue-100/70">Today</div>
-            <h2 className="mt-1 text-2xl font-bold tracking-tight">{pretty(today, { weekday: "long" })}</h2>
-            <p className="text-sm text-blue-100/70">{pretty(today, { day: "numeric", month: "long" })}</p>
+            <div className="text-xs font-medium text-blue-100/70">{isToday ? "Today" : "Selected day"}</div>
+            <h2 className="mt-1 text-2xl font-bold tracking-tight">{pretty(selectedDate, { weekday: "long" })}</h2>
+            <p className="text-sm text-blue-100/70">{pretty(selectedDate, { day: "numeric", month: "long" })}</p>
           </div>
           <Ring value={progress} size={78} dark />
+        </div>
+        <div className="mt-5 flex items-center justify-between gap-2 border-t border-white/10 pt-4">
+          <button onClick={onPreviousDay} className="grid h-10 w-10 place-items-center rounded-xl bg-white/10 text-blue-100 hover:bg-white/15" aria-label="Previous day"><ChevronLeft size={20} /></button>
+          <button onClick={onJumpToday} disabled={isToday} className="rounded-xl bg-white/10 px-4 py-2 text-xs font-semibold text-blue-100 disabled:opacity-40">Jump to today</button>
+          <button onClick={onNextDay} className="grid h-10 w-10 place-items-center rounded-xl bg-white/10 text-blue-100 hover:bg-white/15" aria-label="Next day"><ChevronRight size={20} /></button>
         </div>
         <div className="mt-5 flex items-center gap-2 border-t border-white/10 pt-4 text-sm text-blue-100/80">
           <Flame size={16} className="text-[#6EA8FF]" /> <strong className="text-white">{points}</strong> points this week
@@ -1494,8 +1514,8 @@ function BottomNav({ view, setView }) {
     { id: "today", label: "Today", icon: Home },
     { id: "week", label: "Week", icon: CalendarDays },
     { id: "dumpster", label: "Dump", icon: ClipboardList },
-    { id: "habits", label: "Habits", icon: Flame },
     { id: "tasks", label: "Tasks", icon: BarChart3 },
+    { id: "habits", label: "Habits", icon: Flame },
   ];
   return (
     <nav className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+16px)] z-20 mx-auto flex max-w-[390px] items-center justify-between rounded-3xl border border-white/70 bg-white/75 px-4 py-2.5 shadow-[0_18px_45px_rgba(17,40,73,0.20)] ring-1 ring-slate-200/70 backdrop-blur-2xl sm:hidden">
@@ -1509,6 +1529,7 @@ function BottomNav({ view, setView }) {
 export default function ADHDeedsApp() {
   const [data, setData] = useState(loadData);
   const [activeWeek, setActiveWeek] = useState(() => startOfWeek(new Date()));
+  const [selectedTodayDate, setSelectedTodayDate] = useState(() => new Date());
   const [view, setView] = useState("today");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
@@ -1634,7 +1655,8 @@ export default function ADHDeedsApp() {
   const taskPoints = completed.reduce((sum, task) => sum + task.points, 0);
   const habitPoints = data.habits.reduce((sum, habit) => sum + days.filter((day) => habit.ticks[isoDate(day)]).length * habit.points, 0);
   const points = taskPoints + habitPoints;
-  const todayTasks = weekTasks.filter((task) => task.date === isoDate(today));
+  const selectedTodayKey = isoDate(selectedTodayDate);
+  const todayTasks = weekTasks.filter((task) => task.date === selectedTodayKey);
   const todayProgress = todayTasks.length ? Math.round((todayTasks.filter((task) => task.done).length / todayTasks.length) * 100) : 0;
   const todaySectionOrder = data.ui?.todayOrder || TODAY_SECTION_ORDER;
   const weekSectionOrder = data.ui?.weekOrder || WEEK_SECTION_ORDER;
@@ -1787,6 +1809,15 @@ export default function ADHDeedsApp() {
       if (existing.some((category) => category.toLowerCase() === name.toLowerCase())) return old;
       return { ...old, categories: [...existing, name].sort((a, b) => a.localeCompare(b)) };
     });
+  }
+  function setTodayDate(date) {
+    const nextDate = new Date(date);
+    nextDate.setHours(0, 0, 0, 0);
+    setSelectedTodayDate(nextDate);
+    setActiveWeek(startOfWeek(nextDate));
+  }
+  function moveTodayDate(daysToMove) {
+    setTodayDate(addDays(selectedTodayDate, daysToMove));
   }
   function reorderSections(current, sourceId, targetId, placement) {
     const withoutSource = current.filter((id) => id !== sourceId);
@@ -1941,11 +1972,11 @@ export default function ADHDeedsApp() {
       <Header activeWeek={activeWeek} setActiveWeek={setActiveWeek} onProfile={() => setProfileOpen(true)} points={points} />
       <main className={`mx-auto px-4 py-5 sm:px-8 sm:py-7 ${view === "week" ? "max-w-none 2xl:max-w-[1800px]" : "max-w-7xl"}`}>
         <div className="hidden gap-2 pb-6 sm:flex">
-          {[{id:"today",label:"Today"},{id:"week",label:"Week"},{id:"dumpster",label:"Brain Dumpster"},{id:"habits",label:"Habits"},{id:"tasks",label:"All tasks"}].map((tab) => (
+          {[{id:"today",label:"Today"},{id:"week",label:"Week"},{id:"dumpster",label:"Brain Dumpster"},{id:"tasks",label:"All tasks"},{id:"habits",label:"Habits"}].map((tab) => (
             <button key={tab.id} onClick={() => setView(tab.id)} className={`rounded-full px-5 py-2.5 text-sm font-semibold ${view === tab.id ? "bg-[#112849] text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>{tab.label}</button>
           ))}
         </div>
-        {view === "today" && <TodayView today={today} tasks={weekTasks} habits={data.habits} brainDump={data.brainDump || []} categories={categories} hiddenFeatures={hiddenFeatures} aiAccessToken={session?.access_token} todaySectionOrder={todaySectionOrder} todaySectionWidths={todaySectionWidths} onReorderSection={reorderTodaySection} onToggleTask={toggleTask} onToggleHabit={toggleHabit} onEditTask={openEditTask} onAddTask={openAddTask} onAddBrainDumpItems={addBrainDumpItems} onRemoveBrainDumpItem={removeBrainDumpItem} onConvertBrainDumpItem={convertBrainDumpItem} onAddCategory={() => setCategorySheetOpen(true)} onReframeTask={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} nudges={categoryNudges} points={points} progress={todayProgress} />}
+        {view === "today" && <TodayView today={today} selectedDate={selectedTodayDate} tasks={weekTasks} habits={data.habits} brainDump={data.brainDump || []} categories={categories} hiddenFeatures={hiddenFeatures} aiAccessToken={session?.access_token} todaySectionOrder={todaySectionOrder} todaySectionWidths={todaySectionWidths} onPreviousDay={() => moveTodayDate(-1)} onNextDay={() => moveTodayDate(1)} onJumpToday={() => setTodayDate(new Date())} onReorderSection={reorderTodaySection} onToggleTask={toggleTask} onToggleHabit={toggleHabit} onEditTask={openEditTask} onAddTask={openAddTask} onAddBrainDumpItems={addBrainDumpItems} onRemoveBrainDumpItem={removeBrainDumpItem} onConvertBrainDumpItem={convertBrainDumpItem} onAddCategory={() => setCategorySheetOpen(true)} onReframeTask={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} nudges={categoryNudges} points={points} progress={todayProgress} />}
         {view === "week" && <WeekView days={days} tasks={weekTasks} weekSectionOrder={weekSectionOrder} weekSectionWidths={weekSectionWidths} hiddenFeatures={hiddenFeatures} onReorderSection={reorderWeekSection} onToggle={toggleTask} onEdit={openEditTask} onAddTask={openAddTask} onReframe={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} onMoveTask={moveTask} today={today} points={points} taskPoints={taskPoints} habitPoints={habitPoints} nudges={categoryNudges} />}
         {view === "dumpster" && <BrainDumpsterView items={data.brainDump || []} categories={categories} onAddItems={addBrainDumpItems} onRemoveItem={removeBrainDumpItem} onConvertItem={convertBrainDumpItem} onAddCategory={() => setCategorySheetOpen(true)} />}
         {view === "habits" && <HabitsView days={days} habits={data.habits} onToggle={toggleHabit} onAdd={openAddHabit} onEdit={openEditHabit} onRemove={removeHabit} />}
