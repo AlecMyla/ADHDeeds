@@ -345,15 +345,37 @@ function Logo({ size = "header" }) {
 function TaskRow({ task, onToggle, onRemove, onEdit, onReframe, onMoveTomorrow, onMoveTomorrowPenalty, onDragStart, compact = false, showWebsite = false }) {
   const [noteOpen, setNoteOpen] = useState(false);
   const touchTimer = useRef(null);
+  const swipeStart = useRef(null);
   const website = normalizeWebsite(task.website);
   const listStats = checklistStats(task);
   const hasChecklist = listStats.total > 0;
   const checklistComplete = !hasChecklist || listStats.done === listStats.total;
+  function completeFromSwipe() {
+    if (!task.done && hasChecklist && !checklistComplete) return;
+    onToggle(task.id);
+  }
+  function handleTouchStart(event) {
+    const touch = event.touches[0];
+    swipeStart.current = touch ? { x: touch.clientX, y: touch.clientY } : null;
+  }
+  function handleTouchEnd(event) {
+    if (!swipeStart.current) return;
+    const touch = event.changedTouches[0];
+    if (!touch) return;
+    const deltaX = touch.clientX - swipeStart.current.x;
+    const deltaY = touch.clientY - swipeStart.current.y;
+    swipeStart.current = null;
+    if (Math.abs(deltaX) < 70 || Math.abs(deltaX) < Math.abs(deltaY) * 1.5) return;
+    if (deltaX > 0) completeFromSwipe();
+    if (deltaX < 0 && onRemove) onRemove(task.id);
+  }
   return (
     <motion.div
       layout
       draggable={!!onDragStart}
       onDragStart={(event) => onDragStart?.(event, task.id)}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
       className={`group/task relative flex items-start gap-3 rounded-xl ${compact ? "p-2" : "p-3"} ${onDragStart ? "cursor-grab active:cursor-grabbing" : ""} hover:bg-slate-50`}
     >
       <button
@@ -840,7 +862,7 @@ function TodaySection({ id, children, onMove, className = "" }) {
   );
 }
 
-function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, hiddenFeatures, aiAccessToken, todaySectionOrder, todaySectionWidths, onPreviousDay, onNextDay, onJumpToday, onReorderSection, onToggleTask, onToggleHabit, onEditTask, onAddTask, onAddBrainDumpItems, onRemoveBrainDumpItem, onConvertBrainDumpItem, onAddCategory, onReframeTask, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, nudges, points, progress }) {
+function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, hiddenFeatures, aiAccessToken, todaySectionOrder, todaySectionWidths, onPreviousDay, onNextDay, onJumpToday, onReorderSection, onToggleTask, onToggleHabit, onEditTask, onRemoveTask, onAddTask, onAddBrainDumpItems, onRemoveBrainDumpItem, onConvertBrainDumpItem, onAddCategory, onReframeTask, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, nudges, points, progress }) {
   const selectedKey = isoDate(selectedDate);
   const todayKey = isoDate(today);
   const isToday = selectedKey === todayKey;
@@ -863,6 +885,7 @@ function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, 
                 key={task.id}
                 task={task}
                 onToggle={onToggleTask}
+                onRemove={onRemoveTask}
                 onEdit={onEditTask}
                 onReframe={onReframeTask}
                 onMoveTomorrow={onMoveTomorrow}
@@ -956,7 +979,7 @@ function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, 
   );
 }
 
-function DayCard({ day, tasks, onToggle, onEdit, onAddTask, onReframe, onMoveTomorrow, onMoveTomorrowPenalty, onDropTask, onDragTask, today }) {
+function DayCard({ day, tasks, onToggle, onRemove, onEdit, onAddTask, onReframe, onMoveTomorrow, onMoveTomorrowPenalty, onDropTask, onDragTask, today }) {
   const [dragOver, setDragOver] = useState(false);
   const completed = tasks.filter((t) => t.done).length;
   const pct = tasks.length ? Math.round((completed / tasks.length) * 100) : 0;
@@ -990,6 +1013,7 @@ function DayCard({ day, tasks, onToggle, onEdit, onAddTask, onReframe, onMoveTom
               compact
               task={task}
               onToggle={onToggle}
+              onRemove={onRemove}
               onEdit={onEdit}
               onReframe={onReframe}
               onMoveTomorrow={onMoveTomorrow}
@@ -1006,7 +1030,7 @@ function DayCard({ day, tasks, onToggle, onEdit, onAddTask, onReframe, onMoveTom
   );
 }
 
-function MobileWeekTask({ task, days, onToggle, onEdit, onReframe, onMoveTask, onMoveTomorrow, onMoveTomorrowPenalty }) {
+function MobileWeekTask({ task, days, onToggle, onRemove, onEdit, onReframe, onMoveTask, onMoveTomorrow, onMoveTomorrowPenalty }) {
   const [moving, setMoving] = useState(false);
 
   return (
@@ -1014,6 +1038,7 @@ function MobileWeekTask({ task, days, onToggle, onEdit, onReframe, onMoveTask, o
       <TaskRow
         task={task}
         onToggle={onToggle}
+        onRemove={onRemove}
         onEdit={onEdit}
         onReframe={onReframe}
         onMoveTomorrow={onMoveTomorrow}
@@ -1050,7 +1075,7 @@ function MobileWeekTask({ task, days, onToggle, onEdit, onReframe, onMoveTask, o
   );
 }
 
-function WeekView({ days, tasks, weekSectionOrder, weekSectionWidths, hiddenFeatures, onReorderSection, onToggle, onEdit, onAddTask, onReframe, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, onMoveTask, today, points, taskPoints, habitPoints, nudges }) {
+function WeekView({ days, tasks, weekSectionOrder, weekSectionWidths, hiddenFeatures, onReorderSection, onToggle, onRemove, onEdit, onAddTask, onReframe, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, onMoveTask, today, points, taskPoints, habitPoints, nudges }) {
   const initialDay = days.find((day) => isoDate(day) === isoDate(today)) || days[0];
   const [selectedDay, setSelectedDay] = useState(isoDate(initialDay));
   const done = tasks.filter((t) => t.done).length;
@@ -1113,6 +1138,7 @@ function WeekView({ days, tasks, weekSectionOrder, weekSectionWidths, hiddenFeat
                   task={task}
                   days={days}
                   onToggle={onToggle}
+                  onRemove={onRemove}
                   onEdit={onEdit}
                   onReframe={onReframe}
                   onMoveTask={onMoveTask}
@@ -1136,6 +1162,7 @@ function WeekView({ days, tasks, weekSectionOrder, weekSectionWidths, hiddenFeat
                   day={day}
                   tasks={tasks.filter((t) => t.date === isoDate(day))}
                   onToggle={onToggle}
+                  onRemove={onRemove}
                   onEdit={onEdit}
                   onAddTask={onAddTask}
                   onReframe={onReframe}
@@ -1290,7 +1317,9 @@ function BrainDumpsterView({ items, categories, onAddItems, onRemoveItem, onConv
 
 function AllTasksView({ tasks, categories, onAddCategory, onToggle, onRemove, onAdd, onEdit, onReframe, onMoveTomorrow, onMoveTomorrowPenalty }) {
   const [filter, setFilter] = useState("All");
-  const visible = filter === "All" ? tasks : tasks.filter((task) => task.category === filter);
+  const [showRecurring, setShowRecurring] = useState(true);
+  const filteredByCategory = filter === "All" ? tasks : tasks.filter((task) => task.category === filter);
+  const visible = showRecurring ? filteredByCategory : filteredByCategory.filter((task) => !task.recurringId);
   const sortedTasks = [...visible].sort((a, b) => a.date.localeCompare(b.date));
 
   return (
@@ -1304,6 +1333,15 @@ function AllTasksView({ tasks, categories, onAddCategory, onToggle, onRemove, on
         <button onClick={() => setFilter("All")} className={`whitespace-nowrap rounded-full px-4 py-2 text-xs font-semibold transition ${filter === "All" ? "bg-[#112849] text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>All</button>
         {categories.map((cat) => <button key={cat} onClick={() => setFilter(cat)} className={`whitespace-nowrap rounded-full px-4 py-2 text-xs font-semibold transition ${filter === cat ? "bg-[#112849] text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>{cat}</button>)}
         <button onClick={onAddCategory} className="flex shrink-0 items-center gap-1 rounded-full bg-blue-50 px-4 py-2 text-xs font-semibold text-[#3577DE] ring-1 ring-blue-100"><Plus size={14} /> Add Category</button>
+      </div>
+      <div className="flex items-center justify-between rounded-2xl bg-white px-4 py-3 shadow-sm ring-1 ring-slate-200/70">
+        <div>
+          <div className="text-sm font-bold text-[#112849]">Recurring tasks</div>
+          <div className="text-xs text-slate-400">{showRecurring ? "Showing repeated tasks" : "Hidden from this view"}</div>
+        </div>
+        <button onClick={() => setShowRecurring((value) => !value)} className={`relative h-7 w-12 rounded-full transition ${showRecurring ? "bg-[#3577DE]" : "bg-slate-200"}`} aria-label={showRecurring ? "Hide recurring tasks" : "Show recurring tasks"}>
+          <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition ${showRecurring ? "left-6" : "left-1"}`} />
+        </button>
       </div>
       <div className="overflow-hidden rounded-2xl bg-white p-2 shadow-sm ring-1 ring-slate-200/70">
         {sortedTasks.map((task) => (
@@ -2090,8 +2128,8 @@ export default function ADHDeedsApp() {
             <button key={tab.id} onClick={() => setView(tab.id)} className={`rounded-full px-5 py-2.5 text-sm font-semibold ${view === tab.id ? "bg-[#112849] text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>{tab.label}</button>
           ))}
         </div>
-        {view === "today" && <TodayView today={today} selectedDate={selectedTodayDate} tasks={weekTasks} habits={data.habits} brainDump={data.brainDump || []} categories={categories} hiddenFeatures={hiddenFeatures} aiAccessToken={session?.access_token} todaySectionOrder={todaySectionOrder} todaySectionWidths={todaySectionWidths} onPreviousDay={() => moveTodayDate(-1)} onNextDay={() => moveTodayDate(1)} onJumpToday={() => setTodayDate(new Date())} onReorderSection={reorderTodaySection} onToggleTask={toggleTask} onToggleHabit={toggleHabit} onEditTask={openEditTask} onAddTask={openAddTask} onAddBrainDumpItems={addBrainDumpItems} onRemoveBrainDumpItem={removeBrainDumpItem} onConvertBrainDumpItem={convertBrainDumpItem} onAddCategory={() => setCategorySheetOpen(true)} onReframeTask={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} nudges={categoryNudges} points={points} progress={todayProgress} />}
-        {view === "week" && <WeekView days={days} tasks={weekTasks} weekSectionOrder={weekSectionOrder} weekSectionWidths={weekSectionWidths} hiddenFeatures={hiddenFeatures} onReorderSection={reorderWeekSection} onToggle={toggleTask} onEdit={openEditTask} onAddTask={openAddTask} onReframe={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} onMoveTask={moveTask} today={today} points={points} taskPoints={taskPoints} habitPoints={habitPoints} nudges={categoryNudges} />}
+        {view === "today" && <TodayView today={today} selectedDate={selectedTodayDate} tasks={weekTasks} habits={data.habits} brainDump={data.brainDump || []} categories={categories} hiddenFeatures={hiddenFeatures} aiAccessToken={session?.access_token} todaySectionOrder={todaySectionOrder} todaySectionWidths={todaySectionWidths} onPreviousDay={() => moveTodayDate(-1)} onNextDay={() => moveTodayDate(1)} onJumpToday={() => setTodayDate(new Date())} onReorderSection={reorderTodaySection} onToggleTask={toggleTask} onToggleHabit={toggleHabit} onEditTask={openEditTask} onRemoveTask={removeTask} onAddTask={openAddTask} onAddBrainDumpItems={addBrainDumpItems} onRemoveBrainDumpItem={removeBrainDumpItem} onConvertBrainDumpItem={convertBrainDumpItem} onAddCategory={() => setCategorySheetOpen(true)} onReframeTask={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} nudges={categoryNudges} points={points} progress={todayProgress} />}
+        {view === "week" && <WeekView days={days} tasks={weekTasks} weekSectionOrder={weekSectionOrder} weekSectionWidths={weekSectionWidths} hiddenFeatures={hiddenFeatures} onReorderSection={reorderWeekSection} onToggle={toggleTask} onRemove={removeTask} onEdit={openEditTask} onAddTask={openAddTask} onReframe={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} onMoveTask={moveTask} today={today} points={points} taskPoints={taskPoints} habitPoints={habitPoints} nudges={categoryNudges} />}
         {view === "dumpster" && <BrainDumpsterView items={data.brainDump || []} categories={categories} onAddItems={addBrainDumpItems} onRemoveItem={removeBrainDumpItem} onConvertItem={convertBrainDumpItem} onAddCategory={() => setCategorySheetOpen(true)} />}
         {view === "habits" && <HabitsView days={days} habits={data.habits} onToggle={toggleHabit} onAdd={openAddHabit} onEdit={openEditHabit} onRemove={removeHabit} />}
         {view === "tasks" && <AllTasksView tasks={weekTasks} categories={categories} onAddCategory={() => setCategorySheetOpen(true)} onToggle={toggleTask} onRemove={removeTask} onAdd={openAddTask} onEdit={openEditTask} onReframe={openReframeTask} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} />}
