@@ -7,7 +7,6 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
-  CirclePlus,
   ClipboardList,
   ExternalLink,
   Flame,
@@ -1136,7 +1135,11 @@ function HabitsView({ days, habits, onToggle, onAdd, onEdit, onRemove }) {
         return (
           <div key={habit.id} className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200/70">
             <div className="flex items-start justify-between gap-3">
-              <div><h3 className="font-semibold text-[#112849]">{habit.name}</h3><p className="mt-1 text-xs text-slate-400">{habit.detail} · {habit.points} points</p></div>
+              <div>
+                <h3 className="font-semibold text-[#112849]">{habit.name}</h3>
+                <p className="mt-1 text-xs text-slate-400">{habit.detail} · {habit.points} points</p>
+                {habit.narrative && <p className="mt-3 max-w-2xl rounded-xl bg-blue-50 px-3 py-2 text-sm leading-5 text-[#112849] ring-1 ring-blue-100">{habit.narrative}</p>}
+              </div>
               <div className="flex items-start gap-2">
                 <div className="text-right"><div className="text-lg font-bold text-[#112849]">{completed} / {target}</div><div className="text-[11px] text-slate-400">this week</div></div>
                 <div className="flex rounded-xl bg-slate-50 p-1">
@@ -1354,6 +1357,7 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
 function HabitSheet({ open, onClose, onSave, onUpdate, habit }) {
   const [name, setName] = useState("");
   const [detail, setDetail] = useState("");
+  const [narrative, setNarrative] = useState("");
   const [points, setPoints] = useState(5);
   const [mode, setMode] = useState("daily");
 
@@ -1361,6 +1365,7 @@ function HabitSheet({ open, onClose, onSave, onUpdate, habit }) {
     if (!open) return;
     setName(habit?.name || "");
     setDetail(habit?.detail || "");
+    setNarrative(habit?.narrative || "");
     setPoints(habit?.points || 5);
     setMode(habit?.mode || "daily");
   }, [open, habit]);
@@ -1372,6 +1377,7 @@ function HabitSheet({ open, onClose, onSave, onUpdate, habit }) {
       id: habit?.id || `habit-${Date.now()}`,
       name: name.trim(),
       detail: detail.trim() || (mode === "weekly" ? "Once each week" : "Daily goal"),
+      narrative: narrative.trim(),
       points,
       mode,
       ticks: habit?.ticks || {},
@@ -1392,6 +1398,16 @@ function HabitSheet({ open, onClose, onSave, onUpdate, habit }) {
             <div className="space-y-4">
               <label className="block"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Habit</span><input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="What do you want to keep visible?" className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#3577DE]" /></label>
               <label className="block"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Detail</span><input value={detail} onChange={(e) => setDetail(e.target.value)} placeholder="Daily goal, weekly target, or a note" className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#3577DE]" /></label>
+              <label className="block">
+                <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Narrative</span>
+                <textarea
+                  value={narrative}
+                  onChange={(e) => setNarrative(e.target.value)}
+                  placeholder="Why does this habit matter?"
+                  rows={3}
+                  className="w-full resize-none rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#3577DE]"
+                />
+              </label>
               <div className="grid grid-cols-2 gap-3">
                 <label><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Mode</span><select value={mode} onChange={(e) => setMode(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none">{HABIT_MODES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
                 <label><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Points</span><select value={points} onChange={(e) => setPoints(Number(e.target.value))} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none">{HABIT_POINT_OPTIONS.map((item) => <option key={item} value={item}>{item} pts</option>)}</select></label>
@@ -1473,20 +1489,17 @@ function AIToast({ message, onClose }) {
   );
 }
 
-function BottomNav({ view, setView, onAdd }) {
+function BottomNav({ view, setView }) {
   const tabs = [
     { id: "today", label: "Today", icon: Home },
     { id: "week", label: "Week", icon: CalendarDays },
     { id: "dumpster", label: "Dump", icon: ClipboardList },
-    { id: "add", label: "", icon: CirclePlus },
     { id: "habits", label: "Habits", icon: Flame },
     { id: "tasks", label: "Tasks", icon: BarChart3 },
   ];
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-20 mx-auto flex max-w-md items-center justify-around border-t border-slate-200 bg-white/95 px-3 pb-[max(.55rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur sm:hidden">
-      {tabs.map(({ id, label, icon: Icon }) => id === "add" ? (
-        <button key={id} onClick={onAdd} className="-mt-8 grid h-14 w-14 place-items-center rounded-full bg-[#3577DE] text-white shadow-lg shadow-blue-300"><Plus size={25}/></button>
-      ) : (
+    <nav className="fixed inset-x-0 bottom-0 z-20 mx-auto flex max-w-md items-center justify-between border-t border-slate-200 bg-white/95 px-5 pb-[max(.55rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur sm:hidden">
+      {tabs.map(({ id, label, icon: Icon }) => (
         <button key={id} onClick={() => setView(id)} className={`flex min-w-[52px] flex-col items-center gap-1 text-[10px] font-semibold ${view === id ? "text-[#3577DE]" : "text-slate-400"}`}><Icon size={21}/><span>{label}</span></button>
       ))}
     </nav>
@@ -1938,7 +1951,7 @@ export default function ADHDeedsApp() {
         {view === "habits" && <HabitsView days={days} habits={data.habits} onToggle={toggleHabit} onAdd={openAddHabit} onEdit={openEditHabit} onRemove={removeHabit} />}
         {view === "tasks" && <AllTasksView tasks={weekTasks} categories={categories} onAddCategory={() => setCategorySheetOpen(true)} onToggle={toggleTask} onRemove={removeTask} onAdd={openAddTask} onEdit={openEditTask} onReframe={openReframeTask} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} />}
       </main>
-      <BottomNav view={view} setView={setView} onAdd={openAddTask} />
+      <BottomNav view={view} setView={setView} />
       <AddTaskSheet open={sheetOpen} onClose={closeSheet} onSave={addTask} onUpdate={updateTask} days={days} task={editingTask} initialDate={newTaskDate} initialName={brainTaskDraft?.text || ""} categories={categories} onAddCategory={() => setCategorySheetOpen(true)} />
       <HabitSheet open={habitSheetOpen} onClose={closeHabitSheet} onSave={addHabit} onUpdate={updateHabit} habit={editingHabit} />
       <CategorySheet open={categorySheetOpen} onClose={() => setCategorySheetOpen(false)} onSave={addCategory} />
