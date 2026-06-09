@@ -342,11 +342,13 @@ function Logo({ size = "header" }) {
   return <img src="/adhdeeds-header-logo.png" alt="ADHDeeds" className="h-12 w-auto max-w-[210px] object-contain sm:max-w-[260px]" />;
 }
 
-function TaskRow({ task, onToggle, onRemove, onEdit, onReframe, onMoveTomorrow, onMoveTomorrowPenalty, onDragStart, compact = false, showWebsite = false }) {
+function TaskRow({ task, onToggle, onToggleChecklistItem, onRemove, onEdit, onReframe, onMoveTomorrow, onMoveTomorrowPenalty, onDragStart, compact = false, showWebsite = false }) {
   const [noteOpen, setNoteOpen] = useState(false);
+  const [checklistOpen, setChecklistOpen] = useState(false);
   const touchTimer = useRef(null);
   const swipeStart = useRef(null);
   const website = normalizeWebsite(task.website);
+  const checklist = normalizeChecklist(task.checklist);
   const listStats = checklistStats(task);
   const hasChecklist = listStats.total > 0;
   const checklistComplete = !hasChecklist || listStats.done === listStats.total;
@@ -421,22 +423,35 @@ function TaskRow({ task, onToggle, onRemove, onEdit, onReframe, onMoveTomorrow, 
         <div className="mt-1 flex flex-wrap items-center gap-1.5">
           <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${categoryStyle(task.category)}`}>{task.category}</span>
           <span className="text-[11px] font-medium text-slate-400">{task.points} pts</span>
-          {hasChecklist && onEdit ? (
+          {hasChecklist ? (
             <button
               type="button"
-              onClick={(event) => { event.stopPropagation(); onEdit(task); }}
+              onClick={(event) => { event.stopPropagation(); setChecklistOpen((open) => !open); }}
               className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-[#3577DE] ring-1 ring-blue-100 hover:bg-blue-100"
-              aria-label="Open task checklist"
-              title="Open checklist"
+              aria-label={checklistOpen ? "Hide task checklist" : "Show task checklist"}
+              title={checklistOpen ? "Hide checklist" : "Show checklist"}
             >
               <ListChecks size={11} /> {listStats.done}/{listStats.total}
             </button>
-          ) : hasChecklist && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600"><ListChecks size={11} /> {listStats.done}/{listStats.total}</span>
-          )}
+          ) : null}
           {task.recurringId && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">Repeats</span>}
           {task.important && !task.done && <span className="rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-semibold text-orange-700">Important</span>}
         </div>
+        {checklistOpen && (
+          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="mt-3 space-y-1.5 overflow-hidden rounded-xl bg-slate-50 p-2 ring-1 ring-slate-200/70">
+            {checklist.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={(event) => { event.stopPropagation(); onToggleChecklistItem?.(task.id, item.id); }}
+                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-white"
+              >
+                <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-md border ${item.done ? "border-[#3577DE] bg-[#3577DE] text-white" : "border-slate-300 text-transparent"}`}><Check size={13} strokeWidth={3} /></span>
+                <span className={`text-xs leading-5 ${item.done ? "text-slate-400 line-through" : "text-slate-700"}`}>{item.text}</span>
+              </button>
+            ))}
+          </motion.div>
+        )}
       </div>
       {(onEdit || onReframe || onMoveTomorrow || onMoveTomorrowPenalty || onRemove) && (
         <div className={`${compact ? "absolute right-1 top-1 rounded-lg bg-white/95 shadow-sm ring-1 ring-slate-200" : "flex shrink-0"} flex items-center gap-1 opacity-100 transition sm:opacity-0 sm:group-hover/task:opacity-100`}>
@@ -874,7 +889,7 @@ function TodaySection({ id, children, onMove, className = "" }) {
   );
 }
 
-function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, hiddenFeatures, aiAccessToken, todaySectionOrder, todaySectionWidths, onPreviousDay, onNextDay, onJumpToday, onReorderSection, onToggleTask, onToggleHabit, onEditTask, onRemoveTask, onAddTask, onAddBrainDumpItems, onRemoveBrainDumpItem, onConvertBrainDumpItem, onAddCategory, onReframeTask, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, nudges, points, progress }) {
+function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, hiddenFeatures, aiAccessToken, todaySectionOrder, todaySectionWidths, onPreviousDay, onNextDay, onJumpToday, onReorderSection, onToggleTask, onToggleChecklistItem, onToggleHabit, onEditTask, onRemoveTask, onAddTask, onAddBrainDumpItems, onRemoveBrainDumpItem, onConvertBrainDumpItem, onAddCategory, onReframeTask, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, nudges, points, progress }) {
   const selectedKey = isoDate(selectedDate);
   const todayKey = isoDate(today);
   const isToday = selectedKey === todayKey;
@@ -897,6 +912,7 @@ function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, 
                 key={task.id}
                 task={task}
                 onToggle={onToggleTask}
+                onToggleChecklistItem={onToggleChecklistItem}
                 onRemove={onRemoveTask}
                 onEdit={onEditTask}
                 onReframe={onReframeTask}
@@ -991,7 +1007,7 @@ function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, 
   );
 }
 
-function DayCard({ day, tasks, onToggle, onRemove, onEdit, onAddTask, onReframe, onMoveTomorrow, onMoveTomorrowPenalty, onDropTask, onDragTask, today }) {
+function DayCard({ day, tasks, onToggle, onToggleChecklistItem, onRemove, onEdit, onAddTask, onReframe, onMoveTomorrow, onMoveTomorrowPenalty, onDropTask, onDragTask, today }) {
   const [dragOver, setDragOver] = useState(false);
   const completed = tasks.filter((t) => t.done).length;
   const pct = tasks.length ? Math.round((completed / tasks.length) * 100) : 0;
@@ -1025,6 +1041,7 @@ function DayCard({ day, tasks, onToggle, onRemove, onEdit, onAddTask, onReframe,
               compact
               task={task}
               onToggle={onToggle}
+              onToggleChecklistItem={onToggleChecklistItem}
               onRemove={onRemove}
               onEdit={onEdit}
               onReframe={onReframe}
@@ -1042,7 +1059,7 @@ function DayCard({ day, tasks, onToggle, onRemove, onEdit, onAddTask, onReframe,
   );
 }
 
-function MobileWeekTask({ task, days, onToggle, onRemove, onEdit, onReframe, onMoveTask, onMoveTomorrow, onMoveTomorrowPenalty }) {
+function MobileWeekTask({ task, days, onToggle, onToggleChecklistItem, onRemove, onEdit, onReframe, onMoveTask, onMoveTomorrow, onMoveTomorrowPenalty }) {
   const [moving, setMoving] = useState(false);
 
   return (
@@ -1050,6 +1067,7 @@ function MobileWeekTask({ task, days, onToggle, onRemove, onEdit, onReframe, onM
       <TaskRow
         task={task}
         onToggle={onToggle}
+        onToggleChecklistItem={onToggleChecklistItem}
         onRemove={onRemove}
         onEdit={onEdit}
         onReframe={onReframe}
@@ -1087,7 +1105,7 @@ function MobileWeekTask({ task, days, onToggle, onRemove, onEdit, onReframe, onM
   );
 }
 
-function WeekView({ days, tasks, weekSectionOrder, weekSectionWidths, hiddenFeatures, onReorderSection, onToggle, onRemove, onEdit, onAddTask, onReframe, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, onMoveTask, today, points, taskPoints, habitPoints, nudges }) {
+function WeekView({ days, tasks, weekSectionOrder, weekSectionWidths, hiddenFeatures, onReorderSection, onToggle, onToggleChecklistItem, onRemove, onEdit, onAddTask, onReframe, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, onMoveTask, today, points, taskPoints, habitPoints, nudges }) {
   const initialDay = days.find((day) => isoDate(day) === isoDate(today)) || days[0];
   const [selectedDay, setSelectedDay] = useState(isoDate(initialDay));
   const done = tasks.filter((t) => t.done).length;
@@ -1150,6 +1168,7 @@ function WeekView({ days, tasks, weekSectionOrder, weekSectionWidths, hiddenFeat
                   task={task}
                   days={days}
                   onToggle={onToggle}
+                  onToggleChecklistItem={onToggleChecklistItem}
                   onRemove={onRemove}
                   onEdit={onEdit}
                   onReframe={onReframe}
@@ -1174,6 +1193,7 @@ function WeekView({ days, tasks, weekSectionOrder, weekSectionWidths, hiddenFeat
                   day={day}
                   tasks={tasks.filter((t) => t.date === isoDate(day))}
                   onToggle={onToggle}
+                  onToggleChecklistItem={onToggleChecklistItem}
                   onRemove={onRemove}
                   onEdit={onEdit}
                   onAddTask={onAddTask}
@@ -1327,7 +1347,7 @@ function BrainDumpsterView({ items, categories, onAddItems, onRemoveItem, onConv
   );
 }
 
-function AllTasksView({ tasks, categories, onAddCategory, onToggle, onRemove, onAdd, onEdit, onReframe, onMoveTomorrow, onMoveTomorrowPenalty }) {
+function AllTasksView({ tasks, categories, onAddCategory, onToggle, onToggleChecklistItem, onRemove, onAdd, onEdit, onReframe, onMoveTomorrow, onMoveTomorrowPenalty }) {
   const [filter, setFilter] = useState("All");
   const [showRecurring, setShowRecurring] = useState(true);
   const filteredByCategory = filter === "All" ? tasks : tasks.filter((task) => task.category === filter);
@@ -1359,7 +1379,7 @@ function AllTasksView({ tasks, categories, onAddCategory, onToggle, onRemove, on
         {sortedTasks.map((task) => (
           <div key={task.id} className="border-b border-slate-100 last:border-b-0">
             <div className="px-3 pt-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400">{new Date(task.date + "T00:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" })}</div>
-            <TaskRow task={task} onToggle={onToggle} onRemove={onRemove} onEdit={onEdit} onReframe={onReframe} onMoveTomorrow={onMoveTomorrow} onMoveTomorrowPenalty={onMoveTomorrowPenalty} />
+            <TaskRow task={task} onToggle={onToggle} onToggleChecklistItem={onToggleChecklistItem} onRemove={onRemove} onEdit={onEdit} onReframe={onReframe} onMoveTomorrow={onMoveTomorrow} onMoveTomorrowPenalty={onMoveTomorrowPenalty} />
           </div>
         ))}
         {!visible.length && <div className="p-8 text-center text-sm text-slate-400">No tasks here.</div>}
@@ -1844,6 +1864,17 @@ export default function ADHDeedsApp() {
       }),
     }));
   }
+  function toggleChecklistItem(taskId, itemId) {
+    setData((old) => ({
+      ...old,
+      tasks: old.tasks.map((task) => {
+        if (task.id !== taskId) return task;
+        const checklist = normalizeChecklist(task.checklist).map((item) => item.id === itemId ? { ...item, done: !item.done } : item);
+        const complete = checklist.length > 0 && checklist.every((item) => item.done);
+        return { ...task, checklist, done: complete ? true : false };
+      }),
+    }));
+  }
   function removeTask(id) {
     setData((old) => {
       const task = old.tasks.find((item) => item.id === id);
@@ -2149,11 +2180,11 @@ export default function ADHDeedsApp() {
             <button key={tab.id} onClick={() => setView(tab.id)} className={`rounded-full px-5 py-2.5 text-sm font-semibold ${view === tab.id ? "bg-[#112849] text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>{tab.label}</button>
           ))}
         </div>
-        {view === "today" && <TodayView today={today} selectedDate={selectedTodayDate} tasks={weekTasks} habits={data.habits} brainDump={data.brainDump || []} categories={categories} hiddenFeatures={hiddenFeatures} aiAccessToken={session?.access_token} todaySectionOrder={todaySectionOrder} todaySectionWidths={todaySectionWidths} onPreviousDay={() => moveTodayDate(-1)} onNextDay={() => moveTodayDate(1)} onJumpToday={() => setTodayDate(new Date())} onReorderSection={reorderTodaySection} onToggleTask={toggleTask} onToggleHabit={toggleHabit} onEditTask={openEditTask} onRemoveTask={removeTask} onAddTask={openAddTask} onAddBrainDumpItems={addBrainDumpItems} onRemoveBrainDumpItem={removeBrainDumpItem} onConvertBrainDumpItem={convertBrainDumpItem} onAddCategory={() => setCategorySheetOpen(true)} onReframeTask={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} nudges={categoryNudges} points={points} progress={todayProgress} />}
-        {view === "week" && <WeekView days={days} tasks={weekTasks} weekSectionOrder={weekSectionOrder} weekSectionWidths={weekSectionWidths} hiddenFeatures={hiddenFeatures} onReorderSection={reorderWeekSection} onToggle={toggleTask} onRemove={removeTask} onEdit={openEditTask} onAddTask={openAddTask} onReframe={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} onMoveTask={moveTask} today={today} points={points} taskPoints={taskPoints} habitPoints={habitPoints} nudges={categoryNudges} />}
+        {view === "today" && <TodayView today={today} selectedDate={selectedTodayDate} tasks={weekTasks} habits={data.habits} brainDump={data.brainDump || []} categories={categories} hiddenFeatures={hiddenFeatures} aiAccessToken={session?.access_token} todaySectionOrder={todaySectionOrder} todaySectionWidths={todaySectionWidths} onPreviousDay={() => moveTodayDate(-1)} onNextDay={() => moveTodayDate(1)} onJumpToday={() => setTodayDate(new Date())} onReorderSection={reorderTodaySection} onToggleTask={toggleTask} onToggleChecklistItem={toggleChecklistItem} onToggleHabit={toggleHabit} onEditTask={openEditTask} onRemoveTask={removeTask} onAddTask={openAddTask} onAddBrainDumpItems={addBrainDumpItems} onRemoveBrainDumpItem={removeBrainDumpItem} onConvertBrainDumpItem={convertBrainDumpItem} onAddCategory={() => setCategorySheetOpen(true)} onReframeTask={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} nudges={categoryNudges} points={points} progress={todayProgress} />}
+        {view === "week" && <WeekView days={days} tasks={weekTasks} weekSectionOrder={weekSectionOrder} weekSectionWidths={weekSectionWidths} hiddenFeatures={hiddenFeatures} onReorderSection={reorderWeekSection} onToggle={toggleTask} onToggleChecklistItem={toggleChecklistItem} onRemove={removeTask} onEdit={openEditTask} onAddTask={openAddTask} onReframe={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} onMoveTask={moveTask} today={today} points={points} taskPoints={taskPoints} habitPoints={habitPoints} nudges={categoryNudges} />}
         {view === "dumpster" && <BrainDumpsterView items={data.brainDump || []} categories={categories} onAddItems={addBrainDumpItems} onRemoveItem={removeBrainDumpItem} onConvertItem={convertBrainDumpItem} onAddCategory={() => setCategorySheetOpen(true)} />}
         {view === "habits" && <HabitsView days={days} habits={data.habits} onToggle={toggleHabit} onAdd={openAddHabit} onEdit={openEditHabit} onRemove={removeHabit} />}
-        {view === "tasks" && <AllTasksView tasks={weekTasks} categories={categories} onAddCategory={() => setCategorySheetOpen(true)} onToggle={toggleTask} onRemove={removeTask} onAdd={openAddTask} onEdit={openEditTask} onReframe={openReframeTask} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} />}
+        {view === "tasks" && <AllTasksView tasks={weekTasks} categories={categories} onAddCategory={() => setCategorySheetOpen(true)} onToggle={toggleTask} onToggleChecklistItem={toggleChecklistItem} onRemove={removeTask} onAdd={openAddTask} onEdit={openEditTask} onReframe={openReframeTask} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} />}
       </main>
       <BottomNav view={view} setView={setView} />
       <AddTaskSheet open={sheetOpen} onClose={closeSheet} onSave={addTask} onUpdate={updateTask} days={days} task={editingTask} initialDate={newTaskDate} initialName={brainTaskDraft?.text || ""} categories={categories} onAddCategory={() => setCategorySheetOpen(true)} aiAccessToken={session?.access_token} />
