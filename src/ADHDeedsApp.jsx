@@ -35,6 +35,7 @@ import {
   signUpWithPassword,
 } from "./supabaseClient";
 import { askAI } from "./aiClient";
+import { Analytics } from "@vercel/analytics/react";
 
 const BLUE = "#3577DE";
 const LEGACY_STORAGE_KEY = "adhdiary_mobile_app_v1";
@@ -2140,6 +2141,7 @@ export default function ADHDeedsApp() {
       <CategorySheet open={categorySheetOpen} onClose={() => setCategorySheetOpen(false)} onSave={addCategory} />
       <ProfileSheet open={profileOpen} onClose={() => setProfileOpen(false)} session={session} authLoading={authLoading} syncStatus={syncStatus} notificationsEnabled={notificationsEnabled} notificationSupported={notificationSupported} hiddenFeatures={hiddenFeatures} onToggleFeature={toggleFeature} onResetLayout={resetScreenLayout} onEnableNotifications={enableNotifications} onGoogleSignIn={signInWithGoogle} onSignIn={signIn} onSignOut={signOut} />
       <AISheet insight={aiInsight} onClose={() => setAiInsight(null)} onAddFirstStep={addFirstStepTask} />
+      <Analytics />
       <AIToast message={rescheduleAdvice} onClose={() => setRescheduleAdvice("")} />
     </div>
   );
