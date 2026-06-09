@@ -85,6 +85,7 @@ const SECTION_WIDTHS = ["full", "half"];
 const FEATURE_OPTIONS = [
   { id: "stats", label: "Stats" },
   { id: "dailyPlan", label: "Daily plan" },
+  { id: "habitsInDailyPlan", label: "Habits in daily plan", sub: true },
   { id: "worthNext", label: "Worth doing next" },
   { id: "brainDumpster", label: "Brain Dumpster" },
 ];
@@ -669,7 +670,7 @@ function ProfileSheet({ open, onClose, session, authLoading, syncStatus, notific
                   {FEATURE_OPTIONS.map((feature) => {
                     const hidden = hiddenFeatures.includes(feature.id);
                     return (
-                      <button key={feature.id} onClick={() => onToggleFeature(feature.id)} className="flex w-full items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                      <button key={feature.id} onClick={() => onToggleFeature(feature.id)} className={`flex w-full items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-700 ${feature.sub ? "ml-4 w-[calc(100%-1rem)]" : ""}`}>
                         <span>{feature.label}</span>
                         <span className={`grid h-5 w-5 place-items-center rounded-md border ${hidden ? "border-slate-300 text-transparent" : "border-[#3577DE] bg-[#3577DE] text-white"}`}><Check size={13} strokeWidth={3} /></span>
                       </button>
@@ -951,9 +952,10 @@ function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, 
   const isToday = selectedKey === todayKey;
   const touchStartX = useRef(null);
   const todaysTasks = tasks.filter((t) => t.date === selectedKey);
+  const hidden = new Set(hiddenFeatures);
   const sections = {
     plan: {
-      content: <DailyPlanCard today={selectedDate} tasks={tasks} habits={habits} aiAccessToken={aiAccessToken} />,
+      content: <DailyPlanCard today={selectedDate} tasks={tasks} habits={hidden.has("habitsInDailyPlan") ? [] : habits} aiAccessToken={aiAccessToken} />,
     },
     tasks: {
       content: (
@@ -1011,7 +1013,6 @@ function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, 
       ),
     },
   };
-  const hidden = new Set(hiddenFeatures);
   const visibleOrder = todaySectionOrder.filter((id) => {
     if (!sections[id]) return false;
     if (id === "plan" && hidden.has("dailyPlan")) return false;
