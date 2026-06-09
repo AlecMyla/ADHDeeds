@@ -79,7 +79,7 @@ const RECURRENCE_OPTIONS = [
   { label: "Weekly", value: "weekly" },
   { label: "Monthly", value: "monthly" },
 ];
-const TODAY_SECTION_ORDER = ["plan", "tasks", "dumpster", "nudges", "habits"];
+const TODAY_SECTION_ORDER = ["plan", "considerations", "tasks", "dumpster", "nudges", "habits"];
 const WEEK_SECTION_ORDER = ["stats", "nudges", "tasks"];
 const SECTION_WIDTHS = ["full", "half"];
 const FEATURE_OPTIONS = [
@@ -88,6 +88,9 @@ const FEATURE_OPTIONS = [
   { id: "habitsInDailyPlan", label: "Habits in daily plan", sub: true },
   { id: "worthNext", label: "Worth doing next" },
   { id: "brainDumpster", label: "Brain Dumpster" },
+];
+const BETA_FEATURE_OPTIONS = [
+  { id: "todaysConsiderations", label: "Today's Considerations", beta: true },
 ];
 
 function startOfWeek(date = new Date()) {
@@ -197,7 +200,7 @@ function seedData() {
     brainDump: [],
     categories: DEFAULT_CATEGORIES,
     recurringTasks: [],
-    ui: { todayOrder: TODAY_SECTION_ORDER, weekOrder: WEEK_SECTION_ORDER, todayWidths: {}, weekWidths: {}, hiddenFeatures: [] },
+    ui: { todayOrder: TODAY_SECTION_ORDER, weekOrder: WEEK_SECTION_ORDER, todayWidths: {}, weekWidths: {}, hiddenFeatures: [], enabledFeatures: [] },
   };
 }
 function normalizeData(raw) {
@@ -234,6 +237,9 @@ function normalizeData(raw) {
   const hiddenFeatures = Array.isArray(raw.ui?.hiddenFeatures)
     ? raw.ui.hiddenFeatures.filter((item) => FEATURE_OPTIONS.some((option) => option.id === item))
     : [];
+  const enabledFeatures = Array.isArray(raw.ui?.enabledFeatures)
+    ? raw.ui.enabledFeatures.filter((item) => BETA_FEATURE_OPTIONS.some((option) => option.id === item))
+    : [];
   const todayWidths = normalizeSectionWidths(raw.ui?.todayWidths, TODAY_SECTION_ORDER);
   const weekWidths = normalizeSectionWidths(raw.ui?.weekWidths, WEEK_SECTION_ORDER);
   const recurringCategories = recurringTasks.map((task) => task.category).filter(Boolean);
@@ -246,7 +252,7 @@ function normalizeData(raw) {
     habits,
     brainDump,
     recurringTasks,
-    ui: { ...(raw.ui || {}), todayOrder, weekOrder, todayWidths, weekWidths, hiddenFeatures },
+    ui: { ...(raw.ui || {}), todayOrder, weekOrder, todayWidths, weekWidths, hiddenFeatures, enabledFeatures },
     categories: [...new Set(categories)].sort((a, b) => a.localeCompare(b)),
   };
 }
@@ -643,7 +649,7 @@ function AuthPanel({ session, authLoading, syncStatus, onGoogleSignIn, onSignIn,
   );
 }
 
-function ProfileSheet({ open, onClose, session, authLoading, syncStatus, notificationsEnabled, notificationSupported, hiddenFeatures, onToggleFeature, onResetLayout, onEnableNotifications, onGoogleSignIn, onSignIn, onSignOut }) {
+function ProfileSheet({ open, onClose, session, authLoading, syncStatus, notificationsEnabled, notificationSupported, hiddenFeatures, enabledFeatures, onToggleFeature, onToggleEnabledFeature, onResetLayout, onEnableNotifications, onGoogleSignIn, onSignIn, onSignOut }) {
   const [customiseOpen, setCustomiseOpen] = useState(false);
   return (
     <AnimatePresence>
@@ -661,7 +667,7 @@ function ProfileSheet({ open, onClose, session, authLoading, syncStatus, notific
               <button onClick={() => setCustomiseOpen((open) => !open)} className="flex w-full items-center justify-between text-left">
                 <span>
                   <span className="block text-sm font-bold text-[#112849]">Customise</span>
-                  <span className="mt-1 block text-xs text-slate-400">Hide features you do not want to see.</span>
+                  <span className="mt-1 block text-xs text-slate-400">Hide features or enable beta tools.</span>
                 </span>
                 <Settings2 size={18} className="text-slate-400" />
               </button>
@@ -673,6 +679,18 @@ function ProfileSheet({ open, onClose, session, authLoading, syncStatus, notific
                       <button key={feature.id} onClick={() => onToggleFeature(feature.id)} className={`flex w-full items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-700 ${feature.sub ? "ml-4 w-[calc(100%-1rem)]" : ""}`}>
                         <span>{feature.label}</span>
                         <span className={`grid h-5 w-5 place-items-center rounded-md border ${hidden ? "border-slate-300 text-transparent" : "border-[#3577DE] bg-[#3577DE] text-white"}`}><Check size={13} strokeWidth={3} /></span>
+                      </button>
+                    );
+                  })}
+                  {BETA_FEATURE_OPTIONS.map((feature) => {
+                    const enabled = enabledFeatures.includes(feature.id);
+                    return (
+                      <button key={feature.id} onClick={() => onToggleEnabledFeature(feature.id)} className="flex w-full items-center justify-between rounded-xl bg-blue-50 px-3 py-2 text-sm text-[#112849] ring-1 ring-blue-100">
+                        <span className="flex items-center gap-2">
+                          {feature.label}
+                          <span className="rounded-full bg-[#3577DE] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">Beta</span>
+                        </span>
+                        <span className={`grid h-5 w-5 place-items-center rounded-md border ${enabled ? "border-[#3577DE] bg-[#3577DE] text-white" : "border-slate-300 bg-white text-transparent"}`}><Check size={13} strokeWidth={3} /></span>
                       </button>
                     );
                   })}
@@ -805,6 +823,99 @@ function CategoryNudges({ nudges, onAskOpinion }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
       {nudges.map(({ category, task }) => <NudgeCard key={category} category={category} task={task} onAskOpinion={onAskOpinion} />)}
+    </div>
+  );
+}
+
+function fallbackConsiderations(today, tasks, habits) {
+  const todayKey = isoDate(today);
+  const todayTasks = tasks.filter((task) => task.date === todayKey && !task.done);
+  const movedTasks = todayTasks.filter((task) => task.movedCount || task.penaltyCount).length;
+  const openHabits = habits.filter((habit) => !habit.ticks[todayKey]).length;
+  const considerations = [];
+  if (todayTasks.length >= 5) considerations.push("This is a fuller day. Pick one task to protect and let the rest queue behind it.");
+  if (movedTasks) considerations.push("A few tasks look like they have been carried forward. Try shrinking one to a two-minute first step.");
+  if (openHabits >= 3) considerations.push("Several habits are still open. Choose one anchor habit rather than trying to rescue everything at once.");
+  if (todayTasks.some((task) => /call|phone|appointment|gp|dentist|book|submit|pay/i.test(task.name))) considerations.push("There is a time-sensitive-looking task here. Doing it earlier may reduce friction.");
+  if (!considerations.length) considerations.push("Nothing is shouting for attention. A steady start is enough.");
+  return {
+    weather: [],
+    planning: considerations.slice(0, 3),
+    rut: "If you feel stuck, make the first action smaller rather than pushing harder.",
+    protect: todayTasks.sort((a, b) => Number(b.important) - Number(a.important) || b.points - a.points)[0]?.name || "one easy win",
+  };
+}
+
+function TodayConsiderationsCard({ today, tasks, habits, aiAccessToken }) {
+  const [briefing, setBriefing] = useState(null);
+  const [status, setStatus] = useState("");
+  const todayKey = isoDate(today);
+
+  async function refresh() {
+    setStatus("Checking...");
+    try {
+      const result = await askAI("today-considerations", {
+        date: todayKey,
+        tasks: tasks.filter((task) => task.date === todayKey).map((task) => ({
+          name: task.name,
+          category: task.category,
+          points: task.points,
+          done: task.done,
+          important: task.important,
+          movedCount: task.movedCount || 0,
+          penaltyCount: task.penaltyCount || 0,
+          checklistTotal: normalizeChecklist(task.checklist).length,
+          checklistDone: normalizeChecklist(task.checklist).filter((item) => item.done).length,
+        })),
+        habits: habits.map((habit) => ({
+          name: habit.name,
+          detail: habit.detail,
+          mode: habit.mode,
+          completedToday: !!habit.ticks[todayKey],
+        })),
+      }, aiAccessToken);
+      setBriefing(result);
+      setStatus(result.weatherUnavailable ? "Weather not connected" : "Updated");
+    } catch (error) {
+      setBriefing(fallbackConsiderations(today, tasks, habits));
+      setStatus(error.message || "Using built-in considerations");
+    }
+  }
+
+  useEffect(() => {
+    setBriefing(null);
+    setStatus("");
+  }, [todayKey]);
+
+  const visible = briefing || fallbackConsiderations(today, tasks, habits);
+  const items = [
+    ...(visible.weather || []).map((text) => ({ label: "Weather", text })),
+    ...(visible.planning || []).map((text) => ({ label: "Planning", text })),
+  ].slice(0, 5);
+
+  return (
+    <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200/70">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2 text-sm font-bold text-[#112849]">
+            <Sparkles size={16} className="text-[#3577DE]" /> Today's Considerations
+            <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#3577DE] ring-1 ring-blue-100">Beta</span>
+          </div>
+          <p className="mt-1 text-xs text-slate-400">Weather, task load, and rut prevention.</p>
+        </div>
+        <button onClick={refresh} className="rounded-xl bg-blue-50 px-3 py-2 text-xs font-semibold text-[#3577DE] ring-1 ring-blue-100">Refresh</button>
+      </div>
+      <div className="mt-3 space-y-2">
+        {items.map((item, index) => (
+          <div key={`${item.label}-${index}`} className="rounded-xl bg-slate-50 p-3">
+            <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{item.label}</div>
+            <div className="mt-1 text-sm leading-5 text-slate-700">{item.text}</div>
+          </div>
+        ))}
+        {visible.rut && <div className="rounded-xl bg-blue-50 p-3 text-sm leading-5 text-[#112849] ring-1 ring-blue-100">{visible.rut}</div>}
+        {visible.protect && <div className="text-xs font-semibold text-slate-400">Protect: <span className="text-[#112849]">{visible.protect}</span></div>}
+        {status && <div className="text-xs font-medium text-slate-400">{status}</div>}
+      </div>
     </div>
   );
 }
@@ -946,7 +1057,7 @@ function TodaySection({ id, children, onMove, className = "" }) {
   );
 }
 
-function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, hiddenFeatures, aiAccessToken, todaySectionOrder, todaySectionWidths, onPreviousDay, onNextDay, onJumpToday, onReorderSection, onToggleTask, onToggleChecklistItem, onToggleHabit, onEditTask, onRemoveTask, onAddTask, onAddBrainDumpItems, onRemoveBrainDumpItem, onConvertBrainDumpItem, onAddCategory, onReframeTask, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, nudges, points, progress }) {
+function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, hiddenFeatures, enabledFeatures, aiAccessToken, todaySectionOrder, todaySectionWidths, onPreviousDay, onNextDay, onJumpToday, onReorderSection, onToggleTask, onToggleChecklistItem, onToggleHabit, onEditTask, onRemoveTask, onAddTask, onAddBrainDumpItems, onRemoveBrainDumpItem, onConvertBrainDumpItem, onAddCategory, onReframeTask, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, nudges, points, progress }) {
   const selectedKey = isoDate(selectedDate);
   const todayKey = isoDate(today);
   const isToday = selectedKey === todayKey;
@@ -956,6 +1067,9 @@ function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, 
   const sections = {
     plan: {
       content: <DailyPlanCard today={selectedDate} tasks={tasks} habits={hidden.has("habitsInDailyPlan") ? [] : habits} aiAccessToken={aiAccessToken} />,
+    },
+    considerations: {
+      content: <TodayConsiderationsCard today={selectedDate} tasks={tasks} habits={habits} aiAccessToken={aiAccessToken} />,
     },
     tasks: {
       content: (
@@ -1016,6 +1130,7 @@ function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, 
   const visibleOrder = todaySectionOrder.filter((id) => {
     if (!sections[id]) return false;
     if (id === "plan" && hidden.has("dailyPlan")) return false;
+    if (id === "considerations" && !enabledFeatures.includes("todaysConsiderations")) return false;
     if (id === "nudges" && (hidden.has("worthNext") || !nudges.length)) return false;
     if (id === "dumpster" && hidden.has("brainDumpster")) return false;
     return true;
@@ -1902,6 +2017,7 @@ export default function ADHDeedsApp() {
   const todaySectionWidths = data.ui?.todayWidths || {};
   const weekSectionWidths = data.ui?.weekWidths || {};
   const hiddenFeatures = data.ui?.hiddenFeatures || [];
+  const enabledFeatures = data.ui?.enabledFeatures || [];
   const categories = data.categories || [];
   const categoryNudges = categories.map((category) => {
     const task = [...weekTasks]
@@ -2030,6 +2146,8 @@ export default function ADHDeedsApp() {
         return {
           ...task,
           date,
+          movedCount: (task.movedCount || 0) + (task.date === date ? 0 : 1),
+          penaltyCount: (task.penaltyCount || 0) + (penalize ? 1 : 0),
           points: penalize ? Math.max(0, task.points - 5) : task.points,
         };
       }),
@@ -2131,6 +2249,15 @@ export default function ADHDeedsApp() {
         ? current.filter((item) => item !== featureId)
         : [...current, featureId];
       return { ...old, ui: { ...(old.ui || {}), hiddenFeatures } };
+    });
+  }
+  function toggleEnabledFeature(featureId) {
+    setData((old) => {
+      const current = old.ui?.enabledFeatures || [];
+      const enabledFeatures = current.includes(featureId)
+        ? current.filter((item) => item !== featureId)
+        : [...current, featureId];
+      return { ...old, ui: { ...(old.ui || {}), enabledFeatures } };
     });
   }
   async function openReframeTask(task) {
@@ -2237,7 +2364,7 @@ export default function ADHDeedsApp() {
             <button key={tab.id} onClick={() => setView(tab.id)} className={`rounded-full px-5 py-2.5 text-sm font-semibold ${view === tab.id ? "bg-[#112849] text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>{tab.label}</button>
           ))}
         </div>
-        {view === "today" && <TodayView today={today} selectedDate={selectedTodayDate} tasks={weekTasks} habits={data.habits} brainDump={data.brainDump || []} categories={categories} hiddenFeatures={hiddenFeatures} aiAccessToken={session?.access_token} todaySectionOrder={todaySectionOrder} todaySectionWidths={todaySectionWidths} onPreviousDay={() => moveTodayDate(-1)} onNextDay={() => moveTodayDate(1)} onJumpToday={() => setTodayDate(new Date())} onReorderSection={reorderTodaySection} onToggleTask={toggleTask} onToggleChecklistItem={toggleChecklistItem} onToggleHabit={toggleHabit} onEditTask={openEditTask} onRemoveTask={removeTask} onAddTask={openAddTask} onAddBrainDumpItems={addBrainDumpItems} onRemoveBrainDumpItem={removeBrainDumpItem} onConvertBrainDumpItem={convertBrainDumpItem} onAddCategory={() => setCategorySheetOpen(true)} onReframeTask={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} nudges={categoryNudges} points={points} progress={todayProgress} />}
+        {view === "today" && <TodayView today={today} selectedDate={selectedTodayDate} tasks={weekTasks} habits={data.habits} brainDump={data.brainDump || []} categories={categories} hiddenFeatures={hiddenFeatures} enabledFeatures={enabledFeatures} aiAccessToken={session?.access_token} todaySectionOrder={todaySectionOrder} todaySectionWidths={todaySectionWidths} onPreviousDay={() => moveTodayDate(-1)} onNextDay={() => moveTodayDate(1)} onJumpToday={() => setTodayDate(new Date())} onReorderSection={reorderTodaySection} onToggleTask={toggleTask} onToggleChecklistItem={toggleChecklistItem} onToggleHabit={toggleHabit} onEditTask={openEditTask} onRemoveTask={removeTask} onAddTask={openAddTask} onAddBrainDumpItems={addBrainDumpItems} onRemoveBrainDumpItem={removeBrainDumpItem} onConvertBrainDumpItem={convertBrainDumpItem} onAddCategory={() => setCategorySheetOpen(true)} onReframeTask={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} nudges={categoryNudges} points={points} progress={todayProgress} />}
         {view === "week" && <WeekView days={days} tasks={weekTasks} weekSectionOrder={weekSectionOrder} weekSectionWidths={weekSectionWidths} hiddenFeatures={hiddenFeatures} onReorderSection={reorderWeekSection} onToggle={toggleTask} onToggleChecklistItem={toggleChecklistItem} onRemove={removeTask} onEdit={openEditTask} onAddTask={openAddTask} onReframe={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} onMoveTask={moveTask} today={today} points={points} taskPoints={taskPoints} habitPoints={habitPoints} nudges={categoryNudges} />}
         {view === "dumpster" && <BrainDumpsterView items={data.brainDump || []} categories={categories} onAddItems={addBrainDumpItems} onRemoveItem={removeBrainDumpItem} onConvertItem={convertBrainDumpItem} onAddCategory={() => setCategorySheetOpen(true)} />}
         {view === "habits" && <HabitsView days={days} habits={data.habits} onToggle={toggleHabit} onAdd={openAddHabit} onEdit={openEditHabit} onRemove={removeHabit} />}
@@ -2247,7 +2374,7 @@ export default function ADHDeedsApp() {
       <AddTaskSheet open={sheetOpen} onClose={closeSheet} onSave={addTask} onUpdate={updateTask} days={days} task={editingTask} initialDate={newTaskDate} initialName={brainTaskDraft?.text || ""} categories={categories} onAddCategory={() => setCategorySheetOpen(true)} aiAccessToken={session?.access_token} />
       <HabitSheet open={habitSheetOpen} onClose={closeHabitSheet} onSave={addHabit} onUpdate={updateHabit} habit={editingHabit} />
       <CategorySheet open={categorySheetOpen} onClose={() => setCategorySheetOpen(false)} onSave={addCategory} />
-      <ProfileSheet open={profileOpen} onClose={() => setProfileOpen(false)} session={session} authLoading={authLoading} syncStatus={syncStatus} notificationsEnabled={notificationsEnabled} notificationSupported={notificationSupported} hiddenFeatures={hiddenFeatures} onToggleFeature={toggleFeature} onResetLayout={resetScreenLayout} onEnableNotifications={enableNotifications} onGoogleSignIn={signInWithGoogle} onSignIn={signIn} onSignOut={signOut} />
+      <ProfileSheet open={profileOpen} onClose={() => setProfileOpen(false)} session={session} authLoading={authLoading} syncStatus={syncStatus} notificationsEnabled={notificationsEnabled} notificationSupported={notificationSupported} hiddenFeatures={hiddenFeatures} enabledFeatures={enabledFeatures} onToggleFeature={toggleFeature} onToggleEnabledFeature={toggleEnabledFeature} onResetLayout={resetScreenLayout} onEnableNotifications={enableNotifications} onGoogleSignIn={signInWithGoogle} onSignIn={signIn} onSignOut={signOut} />
       <AISheet insight={aiInsight} onClose={() => setAiInsight(null)} onAddFirstStep={addFirstStepTask} />
       <AIToast message={rescheduleAdvice} onClose={() => setRescheduleAdvice("")} />
     </div>
