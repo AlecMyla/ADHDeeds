@@ -345,6 +345,8 @@ function Logo({ size = "header" }) {
 function TaskRow({ task, onToggle, onToggleChecklistItem, onRemove, onEdit, onReframe, onMoveTomorrow, onMoveTomorrowPenalty, onDragStart, compact = false, showWebsite = false }) {
   const [noteOpen, setNoteOpen] = useState(false);
   const [checklistOpen, setChecklistOpen] = useState(false);
+  const [swipeOffset, setSwipeOffset] = useState(0);
+  const [swipeSettling, setSwipeSettling] = useState(false);
   const touchTimer = useRef(null);
   const swipeStart = useRef(null);
   const website = normalizeWebsite(task.website);
@@ -359,6 +361,17 @@ function TaskRow({ task, onToggle, onToggleChecklistItem, onRemove, onEdit, onRe
   function handleTouchStart(event) {
     const touch = event.touches[0];
     swipeStart.current = touch ? { x: touch.clientX, y: touch.clientY } : null;
+    setSwipeSettling(false);
+  }
+  function handleTouchMove(event) {
+    if (!swipeStart.current) return;
+    const touch = event.touches[0];
+    if (!touch) return;
+    const deltaX = touch.clientX - swipeStart.current.x;
+    const deltaY = touch.clientY - swipeStart.current.y;
+    if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > 12) return;
+    const clamped = Math.max(-96, Math.min(96, deltaX));
+    setSwipeOffset(clamped);
   }
   function handleTouchEnd(event) {
     if (!swipeStart.current) return;
@@ -367,18 +380,60 @@ function TaskRow({ task, onToggle, onToggleChecklistItem, onRemove, onEdit, onRe
     const deltaX = touch.clientX - swipeStart.current.x;
     const deltaY = touch.clientY - swipeStart.current.y;
     swipeStart.current = null;
-    if (Math.abs(deltaX) < 70 || Math.abs(deltaX) < Math.abs(deltaY) * 1.5) return;
-    if (deltaX > 0) completeFromSwipe();
-    if (deltaX < 0 && onRemove) onRemove(task.id);
+    setSwipeSettling(true);
+    if (Math.abs(deltaX) < 72 || Math.abs(deltaX) < Math.abs(deltaY) * 1.5) {
+      setSwipeOffset(0);
+      return;
+    }
+    if (deltaX > 0) {
+      if (!task.done && hasChecklist && !checklistComplete) {
+        setSwipeOffset(0);
+        return;
+      }
+      setSwipeOffset(104);
+      window.setTimeout(() => {
+        completeFromSwipe();
+        setSwipeOffset(0);
+      }, 140);
+    }
+    if (deltaX < 0 && onRemove) {
+      setSwipeOffset(-104);
+      window.setTimeout(() => onRemove(task.id), 140);
+    }
+    if (deltaX < 0 && !onRemove) setSwipeOffset(0);
   }
+  const completeProgress = Math.min(1, Math.max(0, swipeOffset / 72));
+  const deleteProgress = Math.min(1, Math.max(0, -swipeOffset / 72));
   return (
     <motion.div
       layout
+      className="relative overflow-hidden rounded-xl"
+    >
+      <div className="absolute inset-0 flex items-center justify-between rounded-xl bg-slate-100">
+        <div
+          className="flex h-full min-w-24 items-center gap-2 bg-emerald-500 px-4 text-xs font-bold text-white"
+          style={{ opacity: completeProgress, transform: `scale(${0.92 + completeProgress * 0.08})` }}
+        >
+          <Check size={17} /> Complete
+        </div>
+        <div
+          className="flex h-full min-w-24 items-center justify-end gap-2 bg-rose-500 px-4 text-xs font-bold text-white"
+          style={{ opacity: deleteProgress, transform: `scale(${0.92 + deleteProgress * 0.08})` }}
+        >
+          Delete <Trash2 size={17} />
+        </div>
+      </div>
+      <motion.div
       draggable={!!onDragStart}
       onDragStart={(event) => onDragStart?.(event, task.id)}
       onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
-      className={`group/task relative flex items-start gap-3 rounded-xl ${compact ? "p-2" : "p-3"} ${onDragStart ? "cursor-grab active:cursor-grabbing" : ""} hover:bg-slate-50`}
+      className={`group/task relative flex items-start gap-3 rounded-xl bg-white ${compact ? "p-2" : "p-3"} ${onDragStart ? "cursor-grab active:cursor-grabbing" : ""} hover:bg-slate-50`}
+      style={{
+        transform: `translateX(${swipeOffset}px)`,
+        transition: swipeSettling ? "transform 220ms cubic-bezier(.2,1.4,.35,1)" : "none",
+      }}
     >
       <button
         onClick={(event) => { event.stopPropagation(); onToggle(task.id); }}
@@ -482,6 +537,7 @@ function TaskRow({ task, onToggle, onToggleChecklistItem, onRemove, onEdit, onRe
           )}
         </div>
       )}
+    </motion.div>
     </motion.div>
   );
 }
