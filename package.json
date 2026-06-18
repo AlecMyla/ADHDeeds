@@ -9,12 +9,13 @@
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
+    "@vercel/analytics": "^2.0.1",
     "@vitejs/plugin-react": "^4.3.4",
-    "vite": "^5.4.21",
+    "framer-motion": "latest",
+    "lucide-react": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "framer-motion": "latest",
-    "lucide-react": "latest"
+    "vite": "^5.4.21"
   },
   "devDependencies": {
     "autoprefixer": "^10.4.21",
