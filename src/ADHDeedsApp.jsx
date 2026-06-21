@@ -613,7 +613,7 @@ function Header({ activeWeek, setActiveWeek, onProfile, points }) {
         </div>
         <div className="flex items-center gap-2 justify-self-end">
           <div className="rounded-full border border-white/15 px-3 py-2 text-sm"><strong>{points}</strong> points</div>
-          <button onClick={onProfile} className="h-10 rounded-xl bg-white/10 px-3 text-sm font-semibold hover:bg-white/15">Profile</button>
+          <button onClick={onProfile} className="h-10 rounded-xl bg-white/10 px-3 text-sm font-semibold hover:bg-white/15">Me</button>
         </div>
       </div>
     </header>
@@ -738,6 +738,10 @@ function ProfileSetupPage({ profile, onSave, onSignOut }) {
 
 function ProfileSheet({ open, onClose, session, authLoading, syncStatus, notificationsEnabled, notificationSupported, profile, hiddenFeatures, enabledFeatures, onSaveProfile, onToggleFeature, onToggleEnabledFeature, onResetLayout, onEnableNotifications, onGoogleSignIn, onSignIn, onSignOut }) {
   const [customiseOpen, setCustomiseOpen] = useState(false);
+  const [submenu, setSubmenu] = useState("main");
+  useEffect(() => {
+    if (open) setSubmenu("main");
+  }, [open]);
   return (
     <AnimatePresence>
       {open && (
@@ -746,13 +750,24 @@ function ProfileSheet({ open, onClose, session, authLoading, syncStatus, notific
           <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} transition={{ type: "spring", damping: 27, stiffness: 280 }} className="fixed inset-x-0 bottom-0 z-50 max-h-[92vh] overflow-y-auto rounded-t-[28px] bg-[#F3F6FB] px-5 pb-[max(1.4rem,env(safe-area-inset-bottom))] pt-4 shadow-2xl sm:inset-auto sm:right-8 sm:top-[76px] sm:w-[360px] sm:translate-x-0 sm:translate-y-0 sm:rounded-2xl sm:p-4">
             <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-slate-200 sm:hidden" />
             <div className="mb-5 flex items-center justify-between">
-              <h2 className="text-xl font-bold tracking-tight text-[#112849]">Profile</h2>
+              <div className="flex items-center gap-2">
+                {submenu !== "main" && <button type="button" onClick={() => setSubmenu("main")} className="grid h-9 w-9 place-items-center rounded-full bg-white text-slate-500"><ChevronLeft size={18} /></button>}
+                <h2 className="text-xl font-bold tracking-tight text-[#112849]">{submenu === "profile" ? "Profile" : "Me"}</h2>
+              </div>
               <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-white text-slate-500"><X size={18}/></button>
             </div>
-            <AuthPanel session={session} authLoading={authLoading} syncStatus={syncStatus} onGoogleSignIn={onGoogleSignIn} onSignIn={onSignIn} onSignOut={onSignOut} />
-            <div className="mt-3">
+            {submenu === "profile" ? (
               <ProfileForm profile={profile} onSave={onSaveProfile} compact />
-            </div>
+            ) : (
+              <>
+            <AuthPanel session={session} authLoading={authLoading} syncStatus={syncStatus} onGoogleSignIn={onGoogleSignIn} onSignIn={onSignIn} onSignOut={onSignOut} />
+            <button onClick={() => setSubmenu("profile")} className="mt-3 flex w-full items-center justify-between rounded-2xl bg-white p-4 text-left shadow-sm ring-1 ring-slate-200/70">
+              <span>
+                <span className="block text-sm font-bold text-[#112849]">Profile</span>
+                <span className="mt-1 block text-xs text-slate-400">Personal AI context, hobbies, and preferences.</span>
+              </span>
+              <ChevronRight size={18} className="text-slate-400" />
+            </button>
             <div className="mt-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200/70">
               <button onClick={() => setCustomiseOpen((open) => !open)} className="flex w-full items-center justify-between text-left">
                 <span>
@@ -808,6 +823,8 @@ function ProfileSheet({ open, onClose, session, authLoading, syncStatus, notific
                 </div>
               </div>
             </div>
+              </>
+            )}
           </motion.div>
         </>
       )}
