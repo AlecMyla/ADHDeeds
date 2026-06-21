@@ -1641,7 +1641,7 @@ function AllTasksView({ tasks, categories, onAddCategory, onToggle, onToggleChec
         <div><h2 className="text-2xl font-bold tracking-tight text-[#112849]">Tasks</h2><p className="mt-1 text-sm text-slate-500">Everything on your board.</p></div>
         <button onClick={onAdd} className="hidden items-center gap-1 rounded-xl bg-[#3577DE] px-3 py-2 text-sm font-semibold text-white sm:flex"><Plus size={16}/> Add</button>
       </div>
-      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+      <div className="flex items-center gap-2 overflow-x-auto px-px pb-1 pt-1">
         <span className="shrink-0 text-xs font-semibold uppercase tracking-[.12em] text-slate-400">Categories</span>
         <button onClick={() => setFilter("All")} className={`whitespace-nowrap rounded-full px-4 py-2 text-xs font-semibold transition ${filter === "All" ? "bg-[#112849] text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>All</button>
         {categories.map((cat) => <button key={cat} onClick={() => setFilter(cat)} className={`whitespace-nowrap rounded-full px-4 py-2 text-xs font-semibold transition ${filter === cat ? "bg-[#112849] text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>{cat}</button>)}
