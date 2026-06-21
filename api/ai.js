@@ -49,6 +49,9 @@ Create a practical checklist for this task.
 Use 5 to 12 short checklist items.
 Do not repeat existing items.
 Avoid generic filler like "do task" or "finish it".
+If profile.onMedication is "Yes" and the task appears to involve travel, overnight stays, leaving home for a long day, appointments, or routines, include a neutral medication reminder item such as "Medication".
+If profile.gender is "Female" and the task appears to involve travel, overnight stays, packing, work/school day prep, or leaving home for a long day, include a neutral menstrual-cycle products item.
+Do not ask what medication the user takes, do not give dosage or clinical advice, and do not infer pregnancy or health status.
 Task: ${JSON.stringify(payload.task)}`;
   }
 
@@ -60,6 +63,7 @@ Use weather when present: UV index, feels-like temperature, and rain/probability
 Give practical suggestions such as umbrella, sunscreen, jumper, timing outdoor errands, or lighter physical load.
 Use task/habit signals to spot overload, repeated moving, missed habits, growing friction, or checklist-heavy days.
 For rut advice, use research-led but plain-language strategies: reduce activation energy, implementation intentions, two-minute start, environmental cue, body doubling, task chunking, and self-compassion.
+Use profile context lightly for tone and relevance. If profile.adhdStatus is "Undiagnosed" or "Exploring", you may include a gentle, UK-context note that they can ask their GP about NHS ADHD assessment options and Right to Choose in England, but do not diagnose or imply they have ADHD.
 Do not mention research papers or clinical claims.
 Use at most 3 weather items and 3 planning items.
 Data: ${JSON.stringify(payload)}`;

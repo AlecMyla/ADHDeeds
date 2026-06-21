@@ -92,6 +92,22 @@ const FEATURE_OPTIONS = [
 const BETA_FEATURE_OPTIONS = [
   { id: "todaysConsiderations", label: "Today's Considerations", beta: true },
 ];
+const GENDER_OPTIONS = ["Prefer not to say", "Female", "Male", "Non-binary", "Other"];
+const YES_NO_OPTIONS = ["Prefer not to say", "Yes", "No"];
+const ADHD_STATUS_OPTIONS = ["Prefer not to say", "Diagnosed", "Undiagnosed", "Exploring"];
+
+function defaultProfile() {
+  return {
+    completed: false,
+    name: "",
+    age: "",
+    gender: "Prefer not to say",
+    onMedication: "Prefer not to say",
+    adhdStatus: "Prefer not to say",
+    hobbies: "",
+    interests: "",
+  };
+}
 
 function startOfWeek(date = new Date()) {
   const copy = new Date(date);
@@ -144,6 +160,22 @@ function normalizeSectionWidths(raw, allowedSections) {
 }
 function sectionWidthClass(id, widths, extra = "") {
   return `${widths?.[id] === "half" ? "lg:col-span-1" : "lg:col-span-2"} ${extra}`;
+}
+function normalizeProfile(raw) {
+  const fallback = defaultProfile();
+  if (!raw || typeof raw !== "object") return fallback;
+  return {
+    ...fallback,
+    ...raw,
+    name: String(raw.name || ""),
+    age: raw.age ? String(raw.age) : "",
+    gender: GENDER_OPTIONS.includes(raw.gender) ? raw.gender : fallback.gender,
+    onMedication: YES_NO_OPTIONS.includes(raw.onMedication) ? raw.onMedication : fallback.onMedication,
+    adhdStatus: ADHD_STATUS_OPTIONS.includes(raw.adhdStatus) ? raw.adhdStatus : fallback.adhdStatus,
+    hobbies: String(raw.hobbies || ""),
+    interests: String(raw.interests || ""),
+    completed: !!raw.completed,
+  };
 }
 function pretty(date, options = { day: "numeric", month: "short" }) {
   return date.toLocaleDateString("en-GB", options);
@@ -200,6 +232,7 @@ function seedData() {
     brainDump: [],
     categories: DEFAULT_CATEGORIES,
     recurringTasks: [],
+    profile: defaultProfile(),
     ui: { todayOrder: TODAY_SECTION_ORDER, weekOrder: WEEK_SECTION_ORDER, todayWidths: {}, weekWidths: {}, hiddenFeatures: [], enabledFeatures: [] },
   };
 }
@@ -252,6 +285,7 @@ function normalizeData(raw) {
     habits,
     brainDump,
     recurringTasks,
+    profile: normalizeProfile(raw.profile),
     ui: { ...(raw.ui || {}), todayOrder, weekOrder, todayWidths, weekWidths, hiddenFeatures, enabledFeatures },
     categories: [...new Set(categories)].sort((a, b) => a.localeCompare(b)),
   };
@@ -649,20 +683,76 @@ function AuthPanel({ session, authLoading, syncStatus, onGoogleSignIn, onSignIn,
   );
 }
 
-function ProfileSheet({ open, onClose, session, authLoading, syncStatus, notificationsEnabled, notificationSupported, hiddenFeatures, enabledFeatures, onToggleFeature, onToggleEnabledFeature, onResetLayout, onEnableNotifications, onGoogleSignIn, onSignIn, onSignOut }) {
+function ProfileForm({ profile, onSave, compact = false }) {
+  const [draft, setDraft] = useState(() => normalizeProfile(profile));
+
+  useEffect(() => {
+    setDraft(normalizeProfile(profile));
+  }, [profile]);
+
+  function update(field, value) {
+    setDraft((old) => ({ ...old, [field]: value }));
+  }
+  function submit(event) {
+    event.preventDefault();
+    onSave({ ...draft, completed: true });
+  }
+
+  return (
+    <form onSubmit={submit} className={`rounded-2xl bg-white ${compact ? "p-4" : "p-5"} shadow-sm ring-1 ring-slate-200/70`}>
+      <div className="mb-4">
+        <div className="text-sm font-bold text-[#112849]">Personal profile</div>
+        <p className="mt-1 text-xs leading-5 text-slate-400">Optional context for AI suggestions. Avoid adding sensitive detail you do not want used in planning prompts.</p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="block sm:col-span-2"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Name</span><input value={draft.name} onChange={(event) => update("name", event.target.value)} placeholder="What should ADHDeeds call you?" className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-[#3577DE]" /></label>
+        <label className="block"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Age</span><input value={draft.age} onChange={(event) => update("age", event.target.value.replace(/[^\d]/g, "").slice(0, 3))} inputMode="numeric" placeholder="Optional" className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-[#3577DE]" /></label>
+        <label className="block"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Gender</span><select value={draft.gender} onChange={(event) => update("gender", event.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none">{GENDER_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></label>
+        <label className="block"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Medication</span><select value={draft.onMedication} onChange={(event) => update("onMedication", event.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none">{YES_NO_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></label>
+        <label className="block"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">ADHD</span><select value={draft.adhdStatus} onChange={(event) => update("adhdStatus", event.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none">{ADHD_STATUS_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></label>
+        <label className="block sm:col-span-2"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Hobbies</span><textarea value={draft.hobbies} onChange={(event) => update("hobbies", event.target.value)} rows={compact ? 2 : 3} placeholder="Things you enjoy doing..." className="w-full resize-none rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-[#3577DE]" /></label>
+        <label className="block sm:col-span-2"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Interests</span><textarea value={draft.interests} onChange={(event) => update("interests", event.target.value)} rows={compact ? 2 : 3} placeholder="Topics, routines, places, or motivations..." className="w-full resize-none rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-[#3577DE]" /></label>
+      </div>
+      <button type="submit" className="mt-4 w-full rounded-xl bg-[#3577DE] py-3 text-sm font-semibold text-white">Save profile</button>
+    </form>
+  );
+}
+
+function ProfileSetupPage({ profile, onSave, onSignOut }) {
+  return (
+    <div className="min-h-screen bg-[#F3F6FB] px-4 py-8 text-slate-900 sm:px-8">
+      <div className="mx-auto max-w-2xl">
+        <Logo />
+        <div className="mt-6 rounded-3xl bg-[#112849] p-5 text-white shadow-sm">
+          <h1 className="text-2xl font-bold tracking-tight">Set up your profile</h1>
+          <p className="mt-2 text-sm leading-6 text-blue-100/75">This helps ADHDeeds make AI suggestions more relevant. Everything here is optional, but saving this step turns on your workspace.</p>
+        </div>
+        <div className="mt-4">
+          <ProfileForm profile={profile} onSave={onSave} />
+        </div>
+        <button onClick={onSignOut} className="mt-4 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-slate-500 ring-1 ring-slate-200">Sign out</button>
+      </div>
+    </div>
+  );
+}
+
+function ProfileSheet({ open, onClose, session, authLoading, syncStatus, notificationsEnabled, notificationSupported, profile, hiddenFeatures, enabledFeatures, onSaveProfile, onToggleFeature, onToggleEnabledFeature, onResetLayout, onEnableNotifications, onGoogleSignIn, onSignIn, onSignOut }) {
   const [customiseOpen, setCustomiseOpen] = useState(false);
   return (
     <AnimatePresence>
       {open && (
         <>
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="fixed inset-0 z-40 bg-slate-950/40" />
-          <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} transition={{ type: "spring", damping: 27, stiffness: 280 }} className="fixed inset-x-0 bottom-0 z-50 rounded-t-[28px] bg-[#F3F6FB] px-5 pb-[max(1.4rem,env(safe-area-inset-bottom))] pt-4 shadow-2xl sm:inset-auto sm:right-8 sm:top-[76px] sm:w-[360px] sm:translate-x-0 sm:translate-y-0 sm:rounded-2xl sm:p-4">
+          <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} transition={{ type: "spring", damping: 27, stiffness: 280 }} className="fixed inset-x-0 bottom-0 z-50 max-h-[92vh] overflow-y-auto rounded-t-[28px] bg-[#F3F6FB] px-5 pb-[max(1.4rem,env(safe-area-inset-bottom))] pt-4 shadow-2xl sm:inset-auto sm:right-8 sm:top-[76px] sm:w-[360px] sm:translate-x-0 sm:translate-y-0 sm:rounded-2xl sm:p-4">
             <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-slate-200 sm:hidden" />
             <div className="mb-5 flex items-center justify-between">
               <h2 className="text-xl font-bold tracking-tight text-[#112849]">Profile</h2>
               <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-white text-slate-500"><X size={18}/></button>
             </div>
             <AuthPanel session={session} authLoading={authLoading} syncStatus={syncStatus} onGoogleSignIn={onGoogleSignIn} onSignIn={onSignIn} onSignOut={onSignOut} />
+            <div className="mt-3">
+              <ProfileForm profile={profile} onSave={onSaveProfile} compact />
+            </div>
             <div className="mt-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200/70">
               <button onClick={() => setCustomiseOpen((open) => !open)} className="flex w-full items-center justify-between text-left">
                 <span>
@@ -827,7 +917,7 @@ function CategoryNudges({ nudges, onAskOpinion }) {
   );
 }
 
-function fallbackConsiderations(today, tasks, habits) {
+function fallbackConsiderations(today, tasks, habits, profile = defaultProfile()) {
   const todayKey = isoDate(today);
   const todayTasks = tasks.filter((task) => task.date === todayKey && !task.done);
   const movedTasks = todayTasks.filter((task) => task.movedCount || task.penaltyCount).length;
@@ -837,6 +927,7 @@ function fallbackConsiderations(today, tasks, habits) {
   if (movedTasks) considerations.push("A few tasks look like they have been carried forward. Try shrinking one to a two-minute first step.");
   if (openHabits >= 3) considerations.push("Several habits are still open. Choose one anchor habit rather than trying to rescue everything at once.");
   if (todayTasks.some((task) => /call|phone|appointment|gp|dentist|book|submit|pay/i.test(task.name))) considerations.push("There is a time-sensitive-looking task here. Doing it earlier may reduce friction.");
+  if (["Undiagnosed", "Exploring"].includes(profile.adhdStatus)) considerations.push("If ADHD is affecting daily life, you can ask your GP about NHS assessment options, including Right to Choose in England.");
   if (!considerations.length) considerations.push("Nothing is shouting for attention. A steady start is enough.");
   return {
     weather: [],
@@ -846,7 +937,7 @@ function fallbackConsiderations(today, tasks, habits) {
   };
 }
 
-function TodayConsiderationsCard({ today, tasks, habits, aiAccessToken }) {
+function TodayConsiderationsCard({ today, tasks, habits, profile, aiAccessToken }) {
   const [briefing, setBriefing] = useState(null);
   const [status, setStatus] = useState("");
   const todayKey = isoDate(today);
@@ -873,11 +964,12 @@ function TodayConsiderationsCard({ today, tasks, habits, aiAccessToken }) {
           mode: habit.mode,
           completedToday: !!habit.ticks[todayKey],
         })),
+        profile,
       }, aiAccessToken);
       setBriefing(result);
       setStatus(result.weatherUnavailable ? "Weather not connected" : "Updated");
     } catch (error) {
-      setBriefing(fallbackConsiderations(today, tasks, habits));
+      setBriefing(fallbackConsiderations(today, tasks, habits, profile));
       setStatus(error.message || "Using built-in considerations");
     }
   }
@@ -887,7 +979,7 @@ function TodayConsiderationsCard({ today, tasks, habits, aiAccessToken }) {
     setStatus("");
   }, [todayKey]);
 
-  const visible = briefing || fallbackConsiderations(today, tasks, habits);
+  const visible = briefing || fallbackConsiderations(today, tasks, habits, profile);
   const items = [
     ...(visible.weather || []).map((text) => ({ label: "Weather", text })),
     ...(visible.planning || []).map((text) => ({ label: "Planning", text })),
@@ -1057,7 +1149,7 @@ function TodaySection({ id, children, onMove, className = "" }) {
   );
 }
 
-function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, hiddenFeatures, enabledFeatures, aiAccessToken, todaySectionOrder, todaySectionWidths, onPreviousDay, onNextDay, onJumpToday, onReorderSection, onToggleTask, onToggleChecklistItem, onToggleHabit, onEditTask, onRemoveTask, onAddTask, onAddBrainDumpItems, onRemoveBrainDumpItem, onConvertBrainDumpItem, onAddCategory, onReframeTask, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, nudges, points, progress }) {
+function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, profile, hiddenFeatures, enabledFeatures, aiAccessToken, todaySectionOrder, todaySectionWidths, onPreviousDay, onNextDay, onJumpToday, onReorderSection, onToggleTask, onToggleChecklistItem, onToggleHabit, onEditTask, onRemoveTask, onAddTask, onAddBrainDumpItems, onRemoveBrainDumpItem, onConvertBrainDumpItem, onAddCategory, onReframeTask, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, nudges, points, progress }) {
   const selectedKey = isoDate(selectedDate);
   const todayKey = isoDate(today);
   const isToday = selectedKey === todayKey;
@@ -1069,7 +1161,7 @@ function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, 
       content: <DailyPlanCard today={selectedDate} tasks={tasks} habits={hidden.has("habitsInDailyPlan") ? [] : habits} aiAccessToken={aiAccessToken} />,
     },
     considerations: {
-      content: <TodayConsiderationsCard today={selectedDate} tasks={tasks} habits={habits} aiAccessToken={aiAccessToken} />,
+      content: <TodayConsiderationsCard today={selectedDate} tasks={tasks} habits={habits} profile={profile} aiAccessToken={aiAccessToken} />,
     },
     tasks: {
       content: (
@@ -1560,7 +1652,7 @@ function AllTasksView({ tasks, categories, onAddCategory, onToggle, onToggleChec
   );
 }
 
-function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate, initialName = "", categories, onAddCategory, aiAccessToken }) {
+function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate, initialName = "", categories, profile, onAddCategory, aiAccessToken }) {
   const [name, setName] = useState("");
   const [category, setCategory] = useState(categories[0] || "");
   const [date, setDate] = useState(isoDate(days[0]));
@@ -1632,6 +1724,7 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
           category,
           existingItems: normalizeChecklist(checklist).map((item) => item.text),
         },
+        profile,
       }, aiAccessToken);
       const suggested = normalizeChecklist(result.items || []).map((item, index) => ({
         ...item,
@@ -2018,6 +2111,7 @@ export default function ADHDeedsApp() {
   const weekSectionWidths = data.ui?.weekWidths || {};
   const hiddenFeatures = data.ui?.hiddenFeatures || [];
   const enabledFeatures = data.ui?.enabledFeatures || [];
+  const profile = normalizeProfile(data.profile);
   const categories = data.categories || [];
   const categoryNudges = categories.map((category) => {
     const task = [...weekTasks]
@@ -2189,6 +2283,9 @@ export default function ADHDeedsApp() {
       return { ...old, categories: [...existing, name].sort((a, b) => a.localeCompare(b)) };
     });
   }
+  function saveProfile(profileData) {
+    setData((old) => ({ ...old, profile: normalizeProfile({ ...profileData, completed: true }) }));
+  }
   function setTodayDate(date) {
     const nextDate = new Date(date);
     nextDate.setHours(0, 0, 0, 0);
@@ -2355,6 +2452,10 @@ export default function ADHDeedsApp() {
     );
   }
 
+  if (cloudReady && !profile.completed) {
+    return <ProfileSetupPage profile={profile} onSave={saveProfile} onSignOut={signOut} />;
+  }
+
   return (
     <div className="min-h-screen bg-[#F3F6FB] font-sans text-slate-900">
       <Header activeWeek={activeWeek} setActiveWeek={setActiveWeek} onProfile={() => setProfileOpen(true)} points={points} />
@@ -2364,17 +2465,17 @@ export default function ADHDeedsApp() {
             <button key={tab.id} onClick={() => setView(tab.id)} className={`rounded-full px-5 py-2.5 text-sm font-semibold ${view === tab.id ? "bg-[#112849] text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>{tab.label}</button>
           ))}
         </div>
-        {view === "today" && <TodayView today={today} selectedDate={selectedTodayDate} tasks={weekTasks} habits={data.habits} brainDump={data.brainDump || []} categories={categories} hiddenFeatures={hiddenFeatures} enabledFeatures={enabledFeatures} aiAccessToken={session?.access_token} todaySectionOrder={todaySectionOrder} todaySectionWidths={todaySectionWidths} onPreviousDay={() => moveTodayDate(-1)} onNextDay={() => moveTodayDate(1)} onJumpToday={() => setTodayDate(new Date())} onReorderSection={reorderTodaySection} onToggleTask={toggleTask} onToggleChecklistItem={toggleChecklistItem} onToggleHabit={toggleHabit} onEditTask={openEditTask} onRemoveTask={removeTask} onAddTask={openAddTask} onAddBrainDumpItems={addBrainDumpItems} onRemoveBrainDumpItem={removeBrainDumpItem} onConvertBrainDumpItem={convertBrainDumpItem} onAddCategory={() => setCategorySheetOpen(true)} onReframeTask={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} nudges={categoryNudges} points={points} progress={todayProgress} />}
+        {view === "today" && <TodayView today={today} selectedDate={selectedTodayDate} tasks={weekTasks} habits={data.habits} brainDump={data.brainDump || []} categories={categories} profile={profile} hiddenFeatures={hiddenFeatures} enabledFeatures={enabledFeatures} aiAccessToken={session?.access_token} todaySectionOrder={todaySectionOrder} todaySectionWidths={todaySectionWidths} onPreviousDay={() => moveTodayDate(-1)} onNextDay={() => moveTodayDate(1)} onJumpToday={() => setTodayDate(new Date())} onReorderSection={reorderTodaySection} onToggleTask={toggleTask} onToggleChecklistItem={toggleChecklistItem} onToggleHabit={toggleHabit} onEditTask={openEditTask} onRemoveTask={removeTask} onAddTask={openAddTask} onAddBrainDumpItems={addBrainDumpItems} onRemoveBrainDumpItem={removeBrainDumpItem} onConvertBrainDumpItem={convertBrainDumpItem} onAddCategory={() => setCategorySheetOpen(true)} onReframeTask={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} nudges={categoryNudges} points={points} progress={todayProgress} />}
         {view === "week" && <WeekView days={days} tasks={weekTasks} weekSectionOrder={weekSectionOrder} weekSectionWidths={weekSectionWidths} hiddenFeatures={hiddenFeatures} onReorderSection={reorderWeekSection} onToggle={toggleTask} onToggleChecklistItem={toggleChecklistItem} onRemove={removeTask} onEdit={openEditTask} onAddTask={openAddTask} onReframe={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} onMoveTask={moveTask} today={today} points={points} taskPoints={taskPoints} habitPoints={habitPoints} nudges={categoryNudges} />}
         {view === "dumpster" && <BrainDumpsterView items={data.brainDump || []} categories={categories} onAddItems={addBrainDumpItems} onRemoveItem={removeBrainDumpItem} onConvertItem={convertBrainDumpItem} onAddCategory={() => setCategorySheetOpen(true)} />}
         {view === "habits" && <HabitsView days={days} habits={data.habits} onToggle={toggleHabit} onAdd={openAddHabit} onEdit={openEditHabit} onRemove={removeHabit} />}
         {view === "tasks" && <AllTasksView tasks={weekTasks} categories={categories} onAddCategory={() => setCategorySheetOpen(true)} onToggle={toggleTask} onToggleChecklistItem={toggleChecklistItem} onRemove={removeTask} onAdd={openAddTask} onEdit={openEditTask} onReframe={openReframeTask} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} />}
       </main>
       <BottomNav view={view} setView={setView} />
-      <AddTaskSheet open={sheetOpen} onClose={closeSheet} onSave={addTask} onUpdate={updateTask} days={days} task={editingTask} initialDate={newTaskDate} initialName={brainTaskDraft?.text || ""} categories={categories} onAddCategory={() => setCategorySheetOpen(true)} aiAccessToken={session?.access_token} />
+      <AddTaskSheet open={sheetOpen} onClose={closeSheet} onSave={addTask} onUpdate={updateTask} days={days} task={editingTask} initialDate={newTaskDate} initialName={brainTaskDraft?.text || ""} categories={categories} profile={profile} onAddCategory={() => setCategorySheetOpen(true)} aiAccessToken={session?.access_token} />
       <HabitSheet open={habitSheetOpen} onClose={closeHabitSheet} onSave={addHabit} onUpdate={updateHabit} habit={editingHabit} />
       <CategorySheet open={categorySheetOpen} onClose={() => setCategorySheetOpen(false)} onSave={addCategory} />
-      <ProfileSheet open={profileOpen} onClose={() => setProfileOpen(false)} session={session} authLoading={authLoading} syncStatus={syncStatus} notificationsEnabled={notificationsEnabled} notificationSupported={notificationSupported} hiddenFeatures={hiddenFeatures} enabledFeatures={enabledFeatures} onToggleFeature={toggleFeature} onToggleEnabledFeature={toggleEnabledFeature} onResetLayout={resetScreenLayout} onEnableNotifications={enableNotifications} onGoogleSignIn={signInWithGoogle} onSignIn={signIn} onSignOut={signOut} />
+      <ProfileSheet open={profileOpen} onClose={() => setProfileOpen(false)} session={session} authLoading={authLoading} syncStatus={syncStatus} notificationsEnabled={notificationsEnabled} notificationSupported={notificationSupported} profile={profile} hiddenFeatures={hiddenFeatures} enabledFeatures={enabledFeatures} onSaveProfile={saveProfile} onToggleFeature={toggleFeature} onToggleEnabledFeature={toggleEnabledFeature} onResetLayout={resetScreenLayout} onEnableNotifications={enableNotifications} onGoogleSignIn={signInWithGoogle} onSignIn={signIn} onSignOut={signOut} />
       <AISheet insight={aiInsight} onClose={() => setAiInsight(null)} onAddFirstStep={addFirstStepTask} />
       <AIToast message={rescheduleAdvice} onClose={() => setRescheduleAdvice("")} />
     </div>
