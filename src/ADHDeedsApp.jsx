@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   BarChart3,
@@ -158,8 +159,36 @@ function normalizeSectionWidths(raw, allowedSections) {
     Object.entries(raw).filter(([id, width]) => allowedSections.includes(id) && SECTION_WIDTHS.includes(width))
   );
 }
+function normalizeLayoutWidths(order, widths, allowSplit = true) {
+  if (!allowSplit) return {};
+  return Object.fromEntries(
+    order.map((id, index) => {
+      const width = widths?.[id] === "half" ? "half" : "full";
+      const hasHalfNeighbour = widths?.[order[index - 1]] === "half" || widths?.[order[index + 1]] === "half";
+      return [id, width === "half" && hasHalfNeighbour ? "half" : "full"];
+    }).filter(([, width]) => width === "half")
+  );
+}
 function sectionWidthClass(id, widths, extra = "") {
   return `${widths?.[id] === "half" ? "lg:col-span-1" : "lg:col-span-2"} ${extra}`;
+}
+function reorderSectionOrder(current, sourceId, targetId, placement) {
+  const withoutSource = current.filter((id) => id !== sourceId);
+  const targetIndex = withoutSource.indexOf(targetId);
+  if (targetIndex < 0) return current;
+  const insertAfter = placement === "half-after";
+  const insertIndex = insertAfter ? targetIndex + 1 : targetIndex;
+  return [...withoutSource.slice(0, insertIndex), sourceId, ...withoutSource.slice(insertIndex)];
+}
+function previewSectionLayout(currentOrder, currentWidths, sourceId, targetId, placement, allowSplit = true) {
+  if (!sourceId || !targetId || sourceId === targetId) {
+    return { order: currentOrder, widths: normalizeLayoutWidths(currentOrder, currentWidths, allowSplit) };
+  }
+  const order = reorderSectionOrder(currentOrder, sourceId, targetId, placement);
+  const widths = allowSplit && (placement === "half-before" || placement === "half-after")
+    ? { ...currentWidths, [sourceId]: "half", [targetId]: "half" }
+    : { ...currentWidths, [sourceId]: "full" };
+  return { order, widths: normalizeLayoutWidths(order, widths, allowSplit) };
 }
 function normalizeProfile(raw) {
   const fallback = defaultProfile();
@@ -273,13 +302,17 @@ function normalizeData(raw) {
   const enabledFeatures = Array.isArray(raw.ui?.enabledFeatures)
     ? raw.ui.enabledFeatures.filter((item) => BETA_FEATURE_OPTIONS.some((option) => option.id === item))
     : [];
-  const todayWidths = normalizeSectionWidths(raw.ui?.todayWidths, TODAY_SECTION_ORDER);
-  const weekWidths = normalizeSectionWidths(raw.ui?.weekWidths, WEEK_SECTION_ORDER);
+  const todayWidths = normalizeLayoutWidths(todayOrder, normalizeSectionWidths(raw.ui?.todayWidths, TODAY_SECTION_ORDER), true);
+  const weekWidths = normalizeLayoutWidths(weekOrder, normalizeSectionWidths(raw.ui?.weekWidths, WEEK_SECTION_ORDER), false);
   const recurringCategories = recurringTasks.map((task) => task.category).filter(Boolean);
-  const categories = [...rawCategories, ...taskCategories, ...recurringCategories]
+  const categories = [];
+  [...rawCategories, ...taskCategories, ...recurringCategories]
     .map((category) => String(category).trim())
     .filter(Boolean)
-    .filter((category) => rawCategories.includes(category) || !LEGACY_DEFAULT_CATEGORIES.has(category) || taskCategories.includes(category));
+    .filter((category) => rawCategories.includes(category) || !LEGACY_DEFAULT_CATEGORIES.has(category) || taskCategories.includes(category))
+    .forEach((category) => {
+      if (!categories.some((item) => item.toLowerCase() === category.toLowerCase())) categories.push(category);
+    });
   return {
     tasks,
     habits,
@@ -287,7 +320,7 @@ function normalizeData(raw) {
     recurringTasks,
     profile: normalizeProfile(raw.profile),
     ui: { ...(raw.ui || {}), todayOrder, weekOrder, todayWidths, weekWidths, hiddenFeatures, enabledFeatures },
-    categories: [...new Set(categories)].sort((a, b) => a.localeCompare(b)),
+    categories,
   };
 }
 function loadData() {
@@ -385,6 +418,7 @@ function Logo({ size = "header" }) {
 
 function TaskRow({ task, onToggle, onToggleChecklistItem, onRemove, onEdit, onReframe, onMoveTomorrow, onMoveTomorrowPenalty, onDragStart, compact = false, showWebsite = false }) {
   const [noteOpen, setNoteOpen] = useState(false);
+  const [notePosition, setNotePosition] = useState({ left: 0, top: 0 });
   const [checklistOpen, setChecklistOpen] = useState(false);
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [swipeSettling, setSwipeSettling] = useState(false);
@@ -395,6 +429,15 @@ function TaskRow({ task, onToggle, onToggleChecklistItem, onRemove, onEdit, onRe
   const listStats = checklistStats(task);
   const hasChecklist = listStats.total > 0;
   const checklistComplete = !hasChecklist || listStats.done === listStats.total;
+  function openNote(anchor) {
+    const rect = anchor.getBoundingClientRect();
+    const width = Math.min(280, window.innerWidth - 24);
+    const left = Math.max(12, Math.min(window.innerWidth - width - 12, rect.left));
+    const belowTop = rect.bottom + 8;
+    const top = belowTop > window.innerHeight - 140 ? Math.max(12, rect.top - 132) : belowTop;
+    setNotePosition({ left, top });
+    setNoteOpen(true);
+  }
   function completeFromSwipe() {
     if (!task.done && hasChecklist && !checklistComplete) return;
     onToggle(task.id);
@@ -490,24 +533,19 @@ function TaskRow({ task, onToggle, onToggleChecklistItem, onRemove, onEdit, onRe
         <div className={`flex min-w-0 items-center gap-1.5 text-sm font-medium leading-5 ${task.done ? "text-slate-400 line-through" : "text-slate-800"}`}>
           <span className="min-w-0 truncate">{task.name}</span>
           {task.notes && (
-            <span className="relative inline-flex shrink-0">
+            <span className="inline-flex shrink-0">
               <button
                 type="button"
-                onMouseEnter={() => setNoteOpen(true)}
+                onMouseEnter={(event) => openNote(event.currentTarget)}
                 onMouseLeave={() => setNoteOpen(false)}
-                onTouchStart={() => { touchTimer.current = setTimeout(() => setNoteOpen(true), 450); }}
+                onTouchStart={(event) => { const anchor = event.currentTarget; touchTimer.current = setTimeout(() => openNote(anchor), 450); }}
                 onTouchEnd={() => { if (touchTimer.current) clearTimeout(touchTimer.current); }}
-                onClick={(event) => { event.stopPropagation(); setNoteOpen((open) => !open); }}
+                onClick={(event) => { event.stopPropagation(); noteOpen ? setNoteOpen(false) : openNote(event.currentTarget); }}
                 className="grid h-5 w-5 place-items-center rounded-md bg-slate-100 text-slate-500 hover:bg-blue-50 hover:text-[#3577DE]"
                 aria-label="Show task note"
               >
                 <SquarePen size={13} />
               </button>
-              {noteOpen && (
-                <span className="absolute left-0 top-6 z-20 w-56 rounded-xl bg-[#112849] p-3 text-xs font-medium leading-5 text-white shadow-xl">
-                  {task.notes}
-                </span>
-              )}
             </span>
           )}
           {showWebsite && website && (
@@ -578,6 +616,14 @@ function TaskRow({ task, onToggle, onToggleChecklistItem, onRemove, onEdit, onRe
           )}
         </div>
       )}
+      {noteOpen && createPortal((
+        <div
+          className="fixed z-[80] max-w-[calc(100vw-1.5rem)] rounded-xl bg-[#112849] p-3 text-xs font-medium leading-5 text-white shadow-2xl"
+          style={{ left: notePosition.left, top: notePosition.top, width: Math.min(280, window.innerWidth - 24) }}
+        >
+          {task.notes}
+        </div>
+      ), document.body)}
     </motion.div>
     </motion.div>
   );
@@ -1128,10 +1174,11 @@ function DailyPlanCard({ today, tasks, habits, aiAccessToken }) {
   );
 }
 
-function TodaySection({ id, children, onMove, className = "" }) {
+function TodaySection({ id, children, onMove, onPreview, onClearPreview, allowSplit = true, className = "" }) {
   const [dragOver, setDragOver] = useState(false);
 
   function dropPlacement(event) {
+    if (!allowSplit) return "full-before";
     const rect = event.currentTarget.getBoundingClientRect();
     const x = (event.clientX - rect.left) / rect.width;
     if (x < 0.35) return "half-before";
@@ -1151,15 +1198,18 @@ function TodaySection({ id, children, onMove, className = "" }) {
         if (event.dataTransfer.types.includes("application/x-today-section")) {
           event.preventDefault();
           setDragOver(true);
+          onPreview?.(event.dataTransfer.getData("application/x-today-section"), id, dropPlacement(event));
         }
       }}
-      onDragLeave={() => setDragOver(false)}
+      onDragLeave={() => { setDragOver(false); onClearPreview?.(); }}
       onDrop={(event) => {
         event.preventDefault();
         setDragOver(false);
         onMove(event.dataTransfer.getData("application/x-today-section"), id, dropPlacement(event));
+        onClearPreview?.();
       }}
-      className={`group cursor-grab rounded-2xl transition active:cursor-grabbing ${className} ${dragOver ? "ring-2 ring-[#3577DE] ring-offset-2 ring-offset-[#F3F6FB]" : ""}`}
+      onDragEnd={() => { setDragOver(false); onClearPreview?.(); }}
+      className={`group cursor-grab rounded-2xl transition active:cursor-grabbing ${className} ${dragOver ? "outline outline-2 outline-[#3577DE] outline-offset-4" : ""}`}
     >
       {children}
     </motion.div>
@@ -1171,6 +1221,7 @@ function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, 
   const todayKey = isoDate(today);
   const isToday = selectedKey === todayKey;
   const touchStartX = useRef(null);
+  const [layoutPreview, setLayoutPreview] = useState(null);
   const todaysTasks = tasks.filter((t) => t.date === selectedKey);
   const hidden = new Set(hiddenFeatures);
   const sections = {
@@ -1236,7 +1287,7 @@ function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, 
       ),
     },
   };
-  const visibleOrder = todaySectionOrder.filter((id) => {
+  const baseVisibleOrder = todaySectionOrder.filter((id) => {
     if (!sections[id]) return false;
     if (id === "plan" && hidden.has("dailyPlan")) return false;
     if (id === "considerations" && !enabledFeatures.includes("todaysConsiderations")) return false;
@@ -1244,6 +1295,12 @@ function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, 
     if (id === "dumpster" && hidden.has("brainDumpster")) return false;
     return true;
   });
+  const visibleOrder = layoutPreview?.order?.filter((id) => baseVisibleOrder.includes(id)) || baseVisibleOrder;
+  const visibleWidths = layoutPreview ? layoutPreview.widths : normalizeLayoutWidths(baseVisibleOrder, todaySectionWidths, true);
+  function previewMove(sourceId, targetId, placement) {
+    if (!baseVisibleOrder.includes(sourceId) || !baseVisibleOrder.includes(targetId)) return;
+    setLayoutPreview(previewSectionLayout(baseVisibleOrder, todaySectionWidths, sourceId, targetId, placement, true));
+  }
 
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4 pb-24">
@@ -1279,7 +1336,7 @@ function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, 
       </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {visibleOrder.map((id) => (
-          <TodaySection key={id} id={id} onMove={onReorderSection} className={sectionWidthClass(id, todaySectionWidths)}>
+          <TodaySection key={id} id={id} onMove={onReorderSection} onPreview={previewMove} onClearPreview={() => setLayoutPreview(null)} className={sectionWidthClass(id, visibleWidths)}>
             {sections[id].content}
           </TodaySection>
         ))}
@@ -1389,6 +1446,7 @@ function MobileWeekTask({ task, days, onToggle, onToggleChecklistItem, onRemove,
 function WeekView({ days, tasks, weekSectionOrder, weekSectionWidths, hiddenFeatures, onReorderSection, onToggle, onToggleChecklistItem, onRemove, onEdit, onAddTask, onReframe, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, onMoveTask, today, points, taskPoints, habitPoints, nudges }) {
   const initialDay = days.find((day) => isoDate(day) === isoDate(today)) || days[0];
   const [selectedDay, setSelectedDay] = useState(isoDate(initialDay));
+  const [layoutPreview, setLayoutPreview] = useState(null);
   const done = tasks.filter((t) => t.done).length;
   const selectedDate = days.find((day) => isoDate(day) === selectedDay) || days[0];
   const selectedTasks = tasks.filter((task) => task.date === selectedDay);
@@ -1492,17 +1550,23 @@ function WeekView({ days, tasks, weekSectionOrder, weekSectionWidths, hiddenFeat
       ),
     },
   };
-  const visibleOrder = weekSectionOrder.filter((id) => {
+  const baseVisibleOrder = weekSectionOrder.filter((id) => {
     if (!sections[id]) return false;
     if (id === "stats" && hidden.has("stats")) return false;
     if (id === "nudges" && (hidden.has("worthNext") || !nudges.length)) return false;
     return true;
   });
+  const visibleOrder = layoutPreview?.order?.filter((id) => baseVisibleOrder.includes(id)) || baseVisibleOrder;
+  const visibleWidths = layoutPreview ? layoutPreview.widths : normalizeLayoutWidths(baseVisibleOrder, weekSectionWidths, false);
+  function previewMove(sourceId, targetId, placement) {
+    if (!baseVisibleOrder.includes(sourceId) || !baseVisibleOrder.includes(targetId)) return;
+    setLayoutPreview(previewSectionLayout(baseVisibleOrder, weekSectionWidths, sourceId, targetId, placement, false));
+  }
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-5 pb-24">
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {visibleOrder.map((id) => (
-          <TodaySection key={id} id={id} onMove={onReorderSection} className={sectionWidthClass(id, weekSectionWidths, sections[id].className || "")}>
+          <TodaySection key={id} id={id} onMove={onReorderSection} onPreview={previewMove} onClearPreview={() => setLayoutPreview(null)} allowSplit={false} className={sectionWidthClass(id, visibleWidths, sections[id].className || "")}>
             {sections[id].content}
           </TodaySection>
         ))}
@@ -1628,9 +1692,10 @@ function BrainDumpsterView({ items, categories, onAddItems, onRemoveItem, onConv
   );
 }
 
-function AllTasksView({ tasks, categories, onAddCategory, onToggle, onToggleChecklistItem, onRemove, onAdd, onEdit, onReframe, onMoveTomorrow, onMoveTomorrowPenalty }) {
+function AllTasksView({ tasks, categories, onAddCategory, onReorderCategory, onToggle, onToggleChecklistItem, onRemove, onAdd, onEdit, onReframe, onMoveTomorrow, onMoveTomorrowPenalty }) {
   const [filter, setFilter] = useState("All");
   const [showRecurring, setShowRecurring] = useState(true);
+  const [categoryDragOver, setCategoryDragOver] = useState("");
   const filteredByCategory = filter === "All" ? tasks : tasks.filter((task) => task.category === filter);
   const visible = showRecurring ? filteredByCategory : filteredByCategory.filter((task) => !task.recurringId);
   const sortedTasks = [...visible].sort((a, b) => a.date.localeCompare(b.date));
@@ -1644,7 +1709,33 @@ function AllTasksView({ tasks, categories, onAddCategory, onToggle, onToggleChec
       <div className="flex items-center gap-2 overflow-x-auto px-px pb-1 pt-1">
         <span className="shrink-0 text-xs font-semibold uppercase tracking-[.12em] text-slate-400">Categories</span>
         <button onClick={() => setFilter("All")} className={`whitespace-nowrap rounded-full px-4 py-2 text-xs font-semibold transition ${filter === "All" ? "bg-[#112849] text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>All</button>
-        {categories.map((cat) => <button key={cat} onClick={() => setFilter(cat)} className={`whitespace-nowrap rounded-full px-4 py-2 text-xs font-semibold transition ${filter === cat ? "bg-[#112849] text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>{cat}</button>)}
+        {categories.map((cat) => (
+          <button
+            key={cat}
+            draggable
+            onDragStart={(event) => {
+              event.dataTransfer.effectAllowed = "move";
+              event.dataTransfer.setData("application/x-category", cat);
+            }}
+            onDragOver={(event) => {
+              if (!event.dataTransfer.types.includes("application/x-category")) return;
+              event.preventDefault();
+              setCategoryDragOver(cat);
+            }}
+            onDragLeave={() => setCategoryDragOver("")}
+            onDrop={(event) => {
+              event.preventDefault();
+              setCategoryDragOver("");
+              onReorderCategory?.(event.dataTransfer.getData("application/x-category"), cat);
+            }}
+            onDragEnd={() => setCategoryDragOver("")}
+            onClick={() => setFilter(cat)}
+            className={`cursor-grab whitespace-nowrap rounded-full px-4 py-2 text-xs font-semibold transition active:cursor-grabbing ${filter === cat ? "bg-[#112849] text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"} ${categoryDragOver === cat ? "outline outline-2 outline-[#3577DE] outline-offset-2" : ""}`}
+            title="Drag to reorder"
+          >
+            {cat}
+          </button>
+        ))}
         <button onClick={onAddCategory} className="flex shrink-0 items-center gap-1 rounded-full bg-blue-50 px-4 py-2 text-xs font-semibold text-[#3577DE] ring-1 ring-blue-100"><Plus size={14} /> Add Category</button>
       </div>
       <div className="flex items-center justify-between rounded-2xl bg-white px-4 py-3 shadow-sm ring-1 ring-slate-200/70">
@@ -1682,6 +1773,7 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
   const [checklistOpen, setChecklistOpen] = useState(false);
   const [checklist, setChecklist] = useState([]);
   const [checklistStatus, setChecklistStatus] = useState("");
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
   useEffect(() => {
     if (!open) return;
     setName(task?.name || initialName);
@@ -1697,6 +1789,7 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
     setChecklist(savedChecklist);
     setChecklistOpen(!!savedChecklist.length);
     setChecklistStatus("");
+    setDatePickerOpen(false);
   }, [open, days, task, initialDate, initialName, categories]);
   useEffect(() => {
     if (open && !category && categories.length) setCategory(categories[0]);
@@ -1711,7 +1804,7 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
     } else {
       onSave({ id: `task-${Date.now()}`, name: name.trim(), category, date, points, done: false, important, notes: notes.trim(), website: normalizeWebsite(website), checklist: cleanChecklist, recurrence });
     }
-    setName(""); setCategory(categories[0] || ""); setPoints(10); setImportant(false); setNotes(""); setWebsite(""); setRecurrence("none"); setChecklist([]); setChecklistOpen(false); setChecklistStatus(""); onClose();
+    setName(""); setCategory(categories[0] || ""); setPoints(10); setImportant(false); setNotes(""); setWebsite(""); setRecurrence("none"); setChecklist([]); setChecklistOpen(false); setChecklistStatus(""); setDatePickerOpen(false); onClose();
   }
   function createBreakdown() {
     if (!name.trim()) return;
@@ -1767,21 +1860,6 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
             <div className="space-y-4">
               <label className="block"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Task</span><input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="What needs doing?" className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#3577DE]" /></label>
               <button type="button" onClick={createBreakdown} className="flex w-full items-center justify-center gap-2 rounded-xl border border-blue-100 bg-blue-50 py-3 text-sm font-semibold text-[#112849]"><Sparkles size={16} /> Break into smaller tasks</button>
-              {!!breakdown.length && (
-                <div className="rounded-2xl bg-slate-50 p-3">
-                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Suggested subtasks</div>
-                  <div className="space-y-2">
-                    {breakdown.map((item) => <div key={item.name} className="rounded-xl bg-white px-3 py-2 text-sm text-slate-700 ring-1 ring-slate-200">{item.name}</div>)}
-                  </div>
-                  <button type="button" onClick={addBreakdownTasks} className="mt-3 w-full rounded-xl bg-[#112849] py-2.5 text-sm font-semibold text-white">Add these tasks</button>
-                </div>
-              )}
-              <div className="grid grid-cols-2 gap-3">
-                <label><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Category</span><select value={category} onChange={(e) => setCategory(e.target.value)} disabled={!categories.length} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none disabled:bg-slate-50 disabled:text-slate-400">{categories.length ? categories.map((item) => <option key={item}>{item}</option>) : <option>Create a category first</option>}</select></label>
-                <label><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Day</span><select value={date} onChange={(e) => setDate(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none">{days.map((day) => <option key={isoDate(day)} value={isoDate(day)}>{pretty(day, { weekday: "short", day: "numeric", month: "short" })}</option>)}</select></label>
-              </div>
-              <label className="block"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Notes</span><textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="Useful context, booking reference, what to ask..." className="w-full resize-none rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#3577DE]" /></label>
-              <label className="block"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Website</span><input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="example.com" className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#3577DE]" /></label>
               <div className="rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-200/70">
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -1818,6 +1896,27 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
                   </div>
                 )}
               </div>
+              {!!breakdown.length && (
+                <div className="rounded-2xl bg-slate-50 p-3">
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Suggested subtasks</div>
+                  <div className="space-y-2">
+                    {breakdown.map((item) => <div key={item.name} className="rounded-xl bg-white px-3 py-2 text-sm text-slate-700 ring-1 ring-slate-200">{item.name}</div>)}
+                  </div>
+                  <button type="button" onClick={addBreakdownTasks} className="mt-3 w-full rounded-xl bg-[#112849] py-2.5 text-sm font-semibold text-white">Add these tasks</button>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-3">
+                <label><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Category</span><select value={category} onChange={(e) => setCategory(e.target.value)} disabled={!categories.length} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none disabled:bg-slate-50 disabled:text-slate-400">{categories.length ? categories.map((item) => <option key={item}>{item}</option>) : <option>Create a category first</option>}</select><button type="button" onClick={onAddCategory} className="mt-2 rounded-lg bg-blue-50 px-2.5 py-1.5 text-[11px] font-semibold text-[#3577DE] ring-1 ring-blue-100">Add Category</button></label>
+                <label><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Day</span><select value={date} onChange={(e) => setDate(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none">{!days.some((day) => isoDate(day) === date) && <option value={date}>{new Date(`${date}T00:00:00`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}</option>}{days.map((day) => <option key={isoDate(day)} value={isoDate(day)}>{pretty(day, { weekday: "short", day: "numeric", month: "short" })}</option>)}</select><button type="button" onClick={() => setDatePickerOpen((open) => !open)} className="mt-2 rounded-lg bg-slate-50 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200">Not This Week?</button></label>
+              </div>
+              {datePickerOpen && (
+                <label className="block rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-200/70">
+                  <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Choose another date</span>
+                  <input type="date" value={date} onChange={(event) => setDate(event.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-[#3577DE]" />
+                </label>
+              )}
+              <label className="block"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Notes</span><textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="Useful context, booking reference, what to ask..." className="w-full resize-none rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#3577DE]" /></label>
+              <label className="block"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Website</span><input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="example.com" className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#3577DE]" /></label>
               {!task && (
                 <label className="block">
                   <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Repeat</span>
@@ -1826,7 +1925,6 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
                   </select>
                 </label>
               )}
-              <button type="button" onClick={onAddCategory} className="w-full rounded-xl bg-blue-50 py-3 text-sm font-semibold text-[#3577DE] ring-1 ring-blue-100">Add Category</button>
               <div className="grid grid-cols-3 gap-2">{POINT_OPTIONS.map((option) => <button type="button" key={option.value} onClick={() => setPoints(option.value)} className={`rounded-xl border px-2 py-3 text-center ${points === option.value ? "border-[#3577DE] bg-blue-50 text-[#112849]" : "border-slate-200 text-slate-500"}`}><span className="block text-xs font-semibold">{option.label}</span><span className="mt-1 block text-[11px]">{option.value} pts</span></button>)}</div>
               <button type="button" onClick={() => setImportant(!important)} className="flex w-full items-center gap-3 rounded-xl bg-slate-50 p-3 text-left"><span className={`grid h-5 w-5 place-items-center rounded-md border ${important ? "border-[#3577DE] bg-[#3577DE] text-white" : "border-slate-300 text-transparent"}`}><Check size={13} /></span><span className="text-sm text-slate-700">Mark as important</span></button>
               <button type="submit" disabled={!category} className="w-full rounded-xl bg-[#3577DE] py-3.5 text-sm font-semibold text-white disabled:bg-slate-300">{task ? "Save changes" : "Add task"}</button>
@@ -2297,7 +2395,17 @@ export default function ADHDeedsApp() {
     setData((old) => {
       const existing = old.categories || [];
       if (existing.some((category) => category.toLowerCase() === name.toLowerCase())) return old;
-      return { ...old, categories: [...existing, name].sort((a, b) => a.localeCompare(b)) };
+      return { ...old, categories: [...existing, name] };
+    });
+  }
+  function reorderCategory(source, target) {
+    if (!source || !target || source === target) return;
+    setData((old) => {
+      const current = old.categories || [];
+      const withoutSource = current.filter((category) => category !== source);
+      const targetIndex = withoutSource.indexOf(target);
+      if (targetIndex < 0) return old;
+      return { ...old, categories: [...withoutSource.slice(0, targetIndex), source, ...withoutSource.slice(targetIndex)] };
     });
   }
   function saveProfile(profileData) {
@@ -2313,12 +2421,7 @@ export default function ADHDeedsApp() {
     setTodayDate(addDays(selectedTodayDate, daysToMove));
   }
   function reorderSections(current, sourceId, targetId, placement) {
-    const withoutSource = current.filter((id) => id !== sourceId);
-    const targetIndex = withoutSource.indexOf(targetId);
-    if (targetIndex < 0) return current;
-    const insertAfter = placement === "half-after";
-    const insertIndex = insertAfter ? targetIndex + 1 : targetIndex;
-    return [...withoutSource.slice(0, insertIndex), sourceId, ...withoutSource.slice(insertIndex)];
+    return reorderSectionOrder(current, sourceId, targetId, placement);
   }
   function nextWidths(current, sourceId, targetId, placement) {
     if (placement === "half-before" || placement === "half-after") {
@@ -2331,7 +2434,7 @@ export default function ADHDeedsApp() {
     setData((old) => {
       const current = old.ui?.todayOrder || TODAY_SECTION_ORDER;
       const nextOrder = reorderSections(current, sourceId, targetId, placement);
-      const todayWidths = nextWidths(old.ui?.todayWidths || {}, sourceId, targetId, placement);
+      const todayWidths = normalizeLayoutWidths(nextOrder, nextWidths(old.ui?.todayWidths || {}, sourceId, targetId, placement), true);
       return { ...old, ui: { ...(old.ui || {}), todayOrder: nextOrder, todayWidths } };
     });
   }
@@ -2339,8 +2442,8 @@ export default function ADHDeedsApp() {
     if (!sourceId || !targetId || sourceId === targetId) return;
     setData((old) => {
       const current = old.ui?.weekOrder || WEEK_SECTION_ORDER;
-      const nextOrder = reorderSections(current, sourceId, targetId, placement);
-      const weekWidths = nextWidths(old.ui?.weekWidths || {}, sourceId, targetId, placement);
+      const nextOrder = reorderSections(current, sourceId, targetId, "full-before");
+      const weekWidths = normalizeLayoutWidths(nextOrder, nextWidths(old.ui?.weekWidths || {}, sourceId, targetId, "full-before"), false);
       return { ...old, ui: { ...(old.ui || {}), weekOrder: nextOrder, weekWidths } };
     });
   }
@@ -2486,7 +2589,7 @@ export default function ADHDeedsApp() {
         {view === "week" && <WeekView days={days} tasks={weekTasks} weekSectionOrder={weekSectionOrder} weekSectionWidths={weekSectionWidths} hiddenFeatures={hiddenFeatures} onReorderSection={reorderWeekSection} onToggle={toggleTask} onToggleChecklistItem={toggleChecklistItem} onRemove={removeTask} onEdit={openEditTask} onAddTask={openAddTask} onReframe={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} onMoveTask={moveTask} today={today} points={points} taskPoints={taskPoints} habitPoints={habitPoints} nudges={categoryNudges} />}
         {view === "dumpster" && <BrainDumpsterView items={data.brainDump || []} categories={categories} onAddItems={addBrainDumpItems} onRemoveItem={removeBrainDumpItem} onConvertItem={convertBrainDumpItem} onAddCategory={() => setCategorySheetOpen(true)} />}
         {view === "habits" && <HabitsView days={days} habits={data.habits} onToggle={toggleHabit} onAdd={openAddHabit} onEdit={openEditHabit} onRemove={removeHabit} />}
-        {view === "tasks" && <AllTasksView tasks={weekTasks} categories={categories} onAddCategory={() => setCategorySheetOpen(true)} onToggle={toggleTask} onToggleChecklistItem={toggleChecklistItem} onRemove={removeTask} onAdd={openAddTask} onEdit={openEditTask} onReframe={openReframeTask} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} />}
+        {view === "tasks" && <AllTasksView tasks={weekTasks} categories={categories} onAddCategory={() => setCategorySheetOpen(true)} onReorderCategory={reorderCategory} onToggle={toggleTask} onToggleChecklistItem={toggleChecklistItem} onRemove={removeTask} onAdd={openAddTask} onEdit={openEditTask} onReframe={openReframeTask} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} />}
       </main>
       <BottomNav view={view} setView={setView} />
       <AddTaskSheet open={sheetOpen} onClose={closeSheet} onSave={addTask} onUpdate={updateTask} days={days} task={editingTask} initialDate={newTaskDate} initialName={brainTaskDraft?.text || ""} categories={categories} profile={profile} onAddCategory={() => setCategorySheetOpen(true)} aiAccessToken={session?.access_token} />
