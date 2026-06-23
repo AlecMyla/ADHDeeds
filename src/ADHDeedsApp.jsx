@@ -1246,6 +1246,12 @@ function DailyPlanCard({ today, tasks, habits, aiAccessToken }) {
 
 function TodaySection({ id, children, onMove, onPreview, onClearPreview, onPointerStart, onPointerMove, onPointerEnd, draggingId, allowSplit = true, className = "" }) {
   const [dragOver, setDragOver] = useState(false);
+  const longPress = useRef(null);
+
+  function clearLongPress() {
+    if (longPress.current?.timer) window.clearTimeout(longPress.current.timer);
+    longPress.current = null;
+  }
 
   function dropPlacement(event) {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -1288,14 +1294,35 @@ function TodaySection({ id, children, onMove, onPreview, onClearPreview, onPoint
       onPointerDown={(event) => {
         if (event.pointerType === "mouse" && event.button !== 0) return;
         if (isInteractiveTarget(event.target)) return;
-        event.preventDefault();
-        event.currentTarget.setPointerCapture?.(event.pointerId);
-        onPointerStart?.(event, id);
+        if (event.pointerType === "mouse") {
+          event.preventDefault();
+          event.currentTarget.setPointerCapture?.(event.pointerId);
+          onPointerStart?.(event, id);
+          return;
+        }
+        const target = event.currentTarget;
+        const pointerId = event.pointerId;
+        longPress.current = {
+          startX: event.clientX,
+          startY: event.clientY,
+          timer: window.setTimeout(() => {
+            target.setPointerCapture?.(pointerId);
+            onPointerStart?.({ clientX: longPress.current?.startX ?? event.clientX, clientY: longPress.current?.startY ?? event.clientY, currentTarget: target, pointerId }, id);
+            longPress.current = null;
+          }, 450),
+        };
       }}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerEnd}
-      onPointerCancel={onPointerEnd}
-      className={`group rounded-2xl transition ${onPointerStart ? "cursor-grab touch-none active:cursor-grabbing" : "cursor-grab active:cursor-grabbing"} ${className} ${dragOver ? "outline outline-2 outline-[var(--theme-accent)] outline-offset-4" : ""} ${draggingId === id ? "scale-[.985] opacity-70 outline outline-2 outline-dashed outline-[var(--theme-accent)] outline-offset-4" : ""}`}
+      onPointerMove={(event) => {
+        if (longPress.current) {
+          const moved = Math.hypot(event.clientX - longPress.current.startX, event.clientY - longPress.current.startY);
+          if (moved > 10) clearLongPress();
+        }
+        onPointerMove?.(event);
+      }}
+      onPointerUp={(event) => { clearLongPress(); onPointerEnd?.(event); }}
+      onPointerCancel={(event) => { clearLongPress(); onPointerEnd?.(event); }}
+      className={`group rounded-2xl transition ${onPointerStart ? "cursor-grab active:cursor-grabbing" : "cursor-grab active:cursor-grabbing"} ${className} ${dragOver ? "outline outline-2 outline-[var(--theme-accent)] outline-offset-4" : ""} ${draggingId === id ? "scale-[.985] opacity-70 outline outline-2 outline-dashed outline-[var(--theme-accent)] outline-offset-4" : ""}`}
+      style={{ touchAction: draggingId === id ? "none" : "pan-y" }}
     >
       {children}
     </motion.div>
