@@ -465,7 +465,7 @@ function Logo({ size = "header" }) {
   return <img src="/adhdeeds-header-logo.png" alt="ADHDeeds" className="h-12 w-auto max-w-[210px] object-contain sm:max-w-[260px]" />;
 }
 
-function TaskRow({ task, onToggle, onToggleChecklistItem, onRemove, onEdit, onReframe, onMoveTomorrow, onMoveTomorrowPenalty, onDragStart, compact = false, showWebsite = false }) {
+function TaskRow({ task, onToggle, onToggleChecklistItem, onRemove, onEdit, onReframe, onMoveTomorrow, onMoveTomorrowPenalty, onDragStart, compact = false, showWebsite = false, themeColor }) {
   const [noteOpen, setNoteOpen] = useState(false);
   const [notePosition, setNotePosition] = useState({ left: 0, top: 0 });
   const [checklistOpen, setChecklistOpen] = useState(false);
@@ -667,8 +667,8 @@ function TaskRow({ task, onToggle, onToggleChecklistItem, onRemove, onEdit, onRe
       )}
       {noteOpen && createPortal((
         <div
-          className="fixed z-[80] max-w-[calc(100vw-1.5rem)] rounded-xl bg-[var(--theme-header)] p-3 text-xs font-medium leading-5 text-white shadow-2xl"
-          style={{ left: notePosition.left, top: notePosition.top, width: Math.min(280, window.innerWidth - 24) }}
+          className="fixed z-[80] max-w-[calc(100vw-1.5rem)] rounded-xl p-3 text-xs font-medium leading-5 text-white shadow-2xl"
+          style={{ left: notePosition.left, top: notePosition.top, width: Math.min(280, window.innerWidth - 24), backgroundColor: themeColor || "#112849" }}
         >
           {task.notes}
         </div>
@@ -1302,7 +1302,7 @@ function TodaySection({ id, children, onMove, onPreview, onClearPreview, onPoint
   );
 }
 
-function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, profile, hiddenFeatures, enabledFeatures, aiAccessToken, todaySectionOrder, todaySectionWidths, onPreviousDay, onNextDay, onJumpToday, onReorderSection, onToggleTask, onToggleChecklistItem, onToggleHabit, onEditTask, onRemoveTask, onAddTask, onAddBrainDumpItems, onRemoveBrainDumpItem, onConvertBrainDumpItem, onAddCategory, onReframeTask, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, nudges, points, progress }) {
+function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, profile, hiddenFeatures, enabledFeatures, aiAccessToken, themeColor, todaySectionOrder, todaySectionWidths, onPreviousDay, onNextDay, onJumpToday, onReorderSection, onToggleTask, onToggleChecklistItem, onToggleHabit, onEditTask, onRemoveTask, onAddTask, onAddBrainDumpItems, onRemoveBrainDumpItem, onConvertBrainDumpItem, onAddCategory, onReframeTask, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, nudges, points, progress }) {
   const selectedKey = isoDate(selectedDate);
   const todayKey = isoDate(today);
   const isToday = selectedKey === todayKey;
@@ -1339,6 +1339,7 @@ function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, 
                 onMoveTomorrow={onMoveTomorrow}
                 onMoveTomorrowPenalty={onMoveTomorrowPenalty}
                 showWebsite
+                themeColor={themeColor}
               />
             )) : <p className="p-4 text-sm text-slate-400">Nothing planned today.</p>}
           </div>
@@ -1461,7 +1462,7 @@ function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, 
   );
 }
 
-function DayCard({ day, tasks, onToggle, onToggleChecklistItem, onRemove, onEdit, onAddTask, onReframe, onMoveTomorrow, onMoveTomorrowPenalty, onDropTask, onDragTask, today }) {
+function DayCard({ day, tasks, onToggle, onToggleChecklistItem, onRemove, onEdit, onAddTask, onReframe, onMoveTomorrow, onMoveTomorrowPenalty, onDropTask, onDragTask, today, themeColor }) {
   const [dragOver, setDragOver] = useState(false);
   const completed = tasks.filter((t) => t.done).length;
   const pct = tasks.length ? Math.round((completed / tasks.length) * 100) : 0;
@@ -1502,6 +1503,7 @@ function DayCard({ day, tasks, onToggle, onToggleChecklistItem, onRemove, onEdit
               onMoveTomorrow={onMoveTomorrow}
               onMoveTomorrowPenalty={onMoveTomorrowPenalty}
               onDragStart={onDragTask}
+              themeColor={themeColor}
             />
           )) : <div className="pt-8 text-center text-xs text-slate-400">Drop tasks here</div>}
         </div>
@@ -1513,7 +1515,7 @@ function DayCard({ day, tasks, onToggle, onToggleChecklistItem, onRemove, onEdit
   );
 }
 
-function MobileWeekTask({ task, days, onToggle, onToggleChecklistItem, onRemove, onEdit, onReframe, onMoveTask, onMoveTomorrow, onMoveTomorrowPenalty }) {
+function MobileWeekTask({ task, days, onToggle, onToggleChecklistItem, onRemove, onEdit, onReframe, onMoveTask, onMoveTomorrow, onMoveTomorrowPenalty, themeColor }) {
   const [moving, setMoving] = useState(false);
 
   return (
@@ -1527,6 +1529,7 @@ function MobileWeekTask({ task, days, onToggle, onToggleChecklistItem, onRemove,
         onReframe={onReframe}
         onMoveTomorrow={onMoveTomorrow}
         onMoveTomorrowPenalty={onMoveTomorrowPenalty}
+        themeColor={themeColor}
       />
       <div className="px-3 pb-3">
         <button onClick={() => setMoving(!moving)} className="rounded-full bg-slate-100 px-3 py-1.5 text-[11px] font-semibold text-slate-500">
@@ -1559,7 +1562,7 @@ function MobileWeekTask({ task, days, onToggle, onToggleChecklistItem, onRemove,
   );
 }
 
-function WeekView({ days, tasks, weekSectionOrder, weekSectionWidths, hiddenFeatures, onReorderSection, onToggle, onToggleChecklistItem, onRemove, onEdit, onAddTask, onReframe, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, onMoveTask, today, points, taskPoints, habitPoints, nudges }) {
+function WeekView({ days, tasks, weekSectionOrder, weekSectionWidths, hiddenFeatures, themeColor, onReorderSection, onToggle, onToggleChecklistItem, onRemove, onEdit, onAddTask, onReframe, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, onMoveTask, today, points, taskPoints, habitPoints, nudges }) {
   const initialDay = days.find((day) => isoDate(day) === isoDate(today)) || days[0];
   const [selectedDay, setSelectedDay] = useState(isoDate(initialDay));
   const [layoutPreview, setLayoutPreview] = useState(null);
@@ -1573,9 +1576,12 @@ function WeekView({ days, tasks, weekSectionOrder, weekSectionWidths, hiddenFeat
   const desktopWeekColumns = currentWeekIncludesToday
     ? days.map((day) => {
       const dayKey = isoDate(day);
-      if (dayKey < todayKey) return "minmax(118px, .72fr)";
-      if (dayKey === todayKey) return "minmax(250px, 1.55fr)";
-      return "minmax(160px, 1fr)";
+      const distance = Math.abs(daysBetween(todayKey, dayKey));
+      if (dayKey < todayKey) return "minmax(132px, .82fr)";
+      if (dayKey === todayKey) return "minmax(232px, 1.38fr)";
+      if (distance >= 3) return "minmax(136px, .78fr)";
+      if (distance === 2) return "minmax(148px, .88fr)";
+      return "minmax(158px, .96fr)";
     }).join(" ")
     : "repeat(7, minmax(0, 1fr))";
   function dragTask(event, taskId) {
@@ -1642,6 +1648,7 @@ function WeekView({ days, tasks, weekSectionOrder, weekSectionWidths, hiddenFeat
                   onMoveTask={onMoveTask}
                   onMoveTomorrow={onMoveTomorrow}
                   onMoveTomorrowPenalty={onMoveTomorrowPenalty}
+                  themeColor={themeColor}
                 />
               )) : <div className="p-5 text-center text-sm text-slate-400">No tasks planned.</div>}
             </div>
@@ -1670,6 +1677,7 @@ function WeekView({ days, tasks, weekSectionOrder, weekSectionWidths, hiddenFeat
                   onDropTask={(taskId, date) => onMoveTask(taskId, date)}
                   onDragTask={dragTask}
                   today={today}
+                  themeColor={themeColor}
                 />
               </div>
             ))}
@@ -2383,6 +2391,7 @@ export default function ADHDeedsApp() {
   const hiddenFeatures = data.ui?.hiddenFeatures || [];
   const enabledFeatures = data.ui?.enabledFeatures || [];
   const selectedTheme = THEME_OPTIONS.some((option) => option.id === data.ui?.theme) ? data.ui.theme : DEFAULT_THEME_ID;
+  const selectedThemeColors = themeById(selectedTheme);
   const profile = normalizeProfile(data.profile);
   const categories = data.categories || [];
   const categoryNudges = categories.map((category) => {
@@ -2747,8 +2756,8 @@ export default function ADHDeedsApp() {
             <button key={tab.id} onClick={() => setView(tab.id)} className={`rounded-full px-5 py-2.5 text-sm font-semibold ${view === tab.id ? "bg-[var(--theme-header)] text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>{tab.label}</button>
           ))}
         </div>
-        {view === "today" && <TodayView today={today} selectedDate={selectedTodayDate} tasks={weekTasks} habits={data.habits} brainDump={data.brainDump || []} categories={categories} profile={profile} hiddenFeatures={hiddenFeatures} enabledFeatures={enabledFeatures} aiAccessToken={session?.access_token} todaySectionOrder={todaySectionOrder} todaySectionWidths={todaySectionWidths} onPreviousDay={() => moveTodayDate(-1)} onNextDay={() => moveTodayDate(1)} onJumpToday={() => setTodayDate(new Date())} onReorderSection={reorderTodaySection} onToggleTask={toggleTask} onToggleChecklistItem={toggleChecklistItem} onToggleHabit={toggleHabit} onEditTask={openEditTask} onRemoveTask={removeTask} onAddTask={openAddTask} onAddBrainDumpItems={addBrainDumpItems} onRemoveBrainDumpItem={removeBrainDumpItem} onConvertBrainDumpItem={convertBrainDumpItem} onAddCategory={() => setCategorySheetOpen(true)} onReframeTask={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} nudges={categoryNudges} points={points} progress={todayProgress} />}
-        {view === "week" && <WeekView days={days} tasks={weekTasks} weekSectionOrder={weekSectionOrder} weekSectionWidths={weekSectionWidths} hiddenFeatures={hiddenFeatures} onReorderSection={reorderWeekSection} onToggle={toggleTask} onToggleChecklistItem={toggleChecklistItem} onRemove={removeTask} onEdit={openEditTask} onAddTask={openAddTask} onReframe={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} onMoveTask={moveTask} today={today} points={points} taskPoints={taskPoints} habitPoints={habitPoints} nudges={categoryNudges} />}
+        {view === "today" && <TodayView today={today} selectedDate={selectedTodayDate} tasks={weekTasks} habits={data.habits} brainDump={data.brainDump || []} categories={categories} profile={profile} hiddenFeatures={hiddenFeatures} enabledFeatures={enabledFeatures} aiAccessToken={session?.access_token} themeColor={selectedThemeColors.header} todaySectionOrder={todaySectionOrder} todaySectionWidths={todaySectionWidths} onPreviousDay={() => moveTodayDate(-1)} onNextDay={() => moveTodayDate(1)} onJumpToday={() => setTodayDate(new Date())} onReorderSection={reorderTodaySection} onToggleTask={toggleTask} onToggleChecklistItem={toggleChecklistItem} onToggleHabit={toggleHabit} onEditTask={openEditTask} onRemoveTask={removeTask} onAddTask={openAddTask} onAddBrainDumpItems={addBrainDumpItems} onRemoveBrainDumpItem={removeBrainDumpItem} onConvertBrainDumpItem={convertBrainDumpItem} onAddCategory={() => setCategorySheetOpen(true)} onReframeTask={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} nudges={categoryNudges} points={points} progress={todayProgress} />}
+        {view === "week" && <WeekView days={days} tasks={weekTasks} weekSectionOrder={weekSectionOrder} weekSectionWidths={weekSectionWidths} hiddenFeatures={hiddenFeatures} themeColor={selectedThemeColors.header} onReorderSection={reorderWeekSection} onToggle={toggleTask} onToggleChecklistItem={toggleChecklistItem} onRemove={removeTask} onEdit={openEditTask} onAddTask={openAddTask} onReframe={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} onMoveTask={moveTask} today={today} points={points} taskPoints={taskPoints} habitPoints={habitPoints} nudges={categoryNudges} />}
         {view === "dumpster" && <BrainDumpsterView items={data.brainDump || []} categories={categories} onAddItems={addBrainDumpItems} onRemoveItem={removeBrainDumpItem} onConvertItem={convertBrainDumpItem} onAddCategory={() => setCategorySheetOpen(true)} />}
         {view === "habits" && <HabitsView days={days} habits={data.habits} onToggle={toggleHabit} onAdd={openAddHabit} onEdit={openEditHabit} onRemove={removeHabit} />}
         {view === "tasks" && <AllTasksView tasks={weekTasks} categories={categories} onAddCategory={() => setCategorySheetOpen(true)} onReorderCategory={reorderCategory} onToggle={toggleTask} onToggleChecklistItem={toggleChecklistItem} onRemove={removeTask} onAdd={openAddTask} onEdit={openEditTask} onReframe={openReframeTask} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} />}
