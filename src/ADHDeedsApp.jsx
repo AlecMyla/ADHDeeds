@@ -190,6 +190,17 @@ function previewSectionLayout(currentOrder, currentWidths, sourceId, targetId, p
     : { ...currentWidths, [sourceId]: "full" };
   return { order, widths: normalizeLayoutWidths(order, widths, allowSplit) };
 }
+function isInteractiveTarget(target) {
+  return !!target.closest("button, a, input, textarea, select, label, [role='button']");
+}
+function placementFromPoint(element, clientX, allowSplit = true) {
+  if (!allowSplit) return "full-before";
+  const rect = element.getBoundingClientRect();
+  const x = (clientX - rect.left) / rect.width;
+  if (x < 0.35) return "half-before";
+  if (x > 0.65) return "half-after";
+  return "full-before";
+}
 function normalizeProfile(raw) {
   const fallback = defaultProfile();
   if (!raw || typeof raw !== "object") return fallback;
@@ -1174,7 +1185,7 @@ function DailyPlanCard({ today, tasks, habits, aiAccessToken }) {
   );
 }
 
-function TodaySection({ id, children, onMove, onPreview, onClearPreview, allowSplit = true, className = "" }) {
+function TodaySection({ id, children, onMove, onPreview, onClearPreview, onPointerStart, draggingId, allowSplit = true, className = "" }) {
   const [dragOver, setDragOver] = useState(false);
 
   function dropPlacement(event) {
@@ -1189,6 +1200,7 @@ function TodaySection({ id, children, onMove, onPreview, onClearPreview, allowSp
   return (
     <motion.div
       layout
+      data-layout-section={id}
       draggable
       onDragStart={(event) => {
         event.dataTransfer.effectAllowed = "move";
@@ -1201,7 +1213,7 @@ function TodaySection({ id, children, onMove, onPreview, onClearPreview, allowSp
           onPreview?.(event.dataTransfer.getData("application/x-today-section"), id, dropPlacement(event));
         }
       }}
-      onDragLeave={() => { setDragOver(false); onClearPreview?.(); }}
+      onDragLeave={() => setDragOver(false)}
       onDrop={(event) => {
         event.preventDefault();
         setDragOver(false);
@@ -1209,7 +1221,12 @@ function TodaySection({ id, children, onMove, onPreview, onClearPreview, allowSp
         onClearPreview?.();
       }}
       onDragEnd={() => { setDragOver(false); onClearPreview?.(); }}
-      className={`group cursor-grab rounded-2xl transition active:cursor-grabbing ${className} ${dragOver ? "outline outline-2 outline-[#3577DE] outline-offset-4" : ""}`}
+      onPointerDown={(event) => {
+        if (event.pointerType === "mouse" && event.button !== 0) return;
+        if (isInteractiveTarget(event.target)) return;
+        onPointerStart?.(event, id);
+      }}
+      className={`group rounded-2xl transition ${onPointerStart ? "cursor-grab touch-none active:cursor-grabbing" : "cursor-grab active:cursor-grabbing"} ${className} ${dragOver ? "outline outline-2 outline-[#3577DE] outline-offset-4" : ""} ${draggingId === id ? "scale-[.985] opacity-70 outline outline-2 outline-dashed outline-[#3577DE] outline-offset-4" : ""}`}
     >
       {children}
     </motion.div>
@@ -1221,7 +1238,9 @@ function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, 
   const todayKey = isoDate(today);
   const isToday = selectedKey === todayKey;
   const touchStartX = useRef(null);
+  const pointerDrag = useRef(null);
   const [layoutPreview, setLayoutPreview] = useState(null);
+  const [draggingSection, setDraggingSection] = useState("");
   const todaysTasks = tasks.filter((t) => t.date === selectedKey);
   const hidden = new Set(hiddenFeatures);
   const sections = {
@@ -1301,6 +1320,34 @@ function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, 
     if (!baseVisibleOrder.includes(sourceId) || !baseVisibleOrder.includes(targetId)) return;
     setLayoutPreview(previewSectionLayout(baseVisibleOrder, todaySectionWidths, sourceId, targetId, placement, true));
   }
+  function startSectionPointer(event, sourceId) {
+    pointerDrag.current = { sourceId, startX: event.clientX, startY: event.clientY, targetId: "", placement: "full-before", active: false };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  }
+  function moveSectionPointer(event) {
+    const drag = pointerDrag.current;
+    if (!drag) return;
+    const distance = Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY);
+    if (!drag.active && distance < 8) return;
+    drag.active = true;
+    setDraggingSection(drag.sourceId);
+    const target = document.elementFromPoint(event.clientX, event.clientY)?.closest("[data-layout-section]");
+    const targetId = target?.dataset.layoutSection;
+    if (!target || !targetId || targetId === drag.sourceId || !baseVisibleOrder.includes(targetId)) return;
+    const placement = placementFromPoint(target, event.clientX, true);
+    drag.targetId = targetId;
+    drag.placement = placement;
+    previewMove(drag.sourceId, targetId, placement);
+  }
+  function finishSectionPointer() {
+    const drag = pointerDrag.current;
+    pointerDrag.current = null;
+    setDraggingSection("");
+    if (drag?.active && drag.targetId && drag.targetId !== drag.sourceId) {
+      onReorderSection(drag.sourceId, drag.targetId, drag.placement);
+    }
+    setLayoutPreview(null);
+  }
 
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4 pb-24">
@@ -1334,9 +1381,9 @@ function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, 
           <Flame size={16} className="text-[#6EA8FF]" /> <strong className="text-white">{points}</strong> points this week
         </div>
       </div>
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2" onPointerMove={moveSectionPointer} onPointerUp={finishSectionPointer} onPointerCancel={finishSectionPointer}>
         {visibleOrder.map((id) => (
-          <TodaySection key={id} id={id} onMove={onReorderSection} onPreview={previewMove} onClearPreview={() => setLayoutPreview(null)} className={sectionWidthClass(id, visibleWidths)}>
+          <TodaySection key={id} id={id} onMove={onReorderSection} onPreview={previewMove} onClearPreview={() => setLayoutPreview(null)} onPointerStart={startSectionPointer} draggingId={draggingSection} className={sectionWidthClass(id, visibleWidths)}>
             {sections[id].content}
           </TodaySection>
         ))}
@@ -1447,6 +1494,8 @@ function WeekView({ days, tasks, weekSectionOrder, weekSectionWidths, hiddenFeat
   const initialDay = days.find((day) => isoDate(day) === isoDate(today)) || days[0];
   const [selectedDay, setSelectedDay] = useState(isoDate(initialDay));
   const [layoutPreview, setLayoutPreview] = useState(null);
+  const [draggingSection, setDraggingSection] = useState("");
+  const pointerDrag = useRef(null);
   const done = tasks.filter((t) => t.done).length;
   const selectedDate = days.find((day) => isoDate(day) === selectedDay) || days[0];
   const selectedTasks = tasks.filter((task) => task.date === selectedDay);
@@ -1562,11 +1611,38 @@ function WeekView({ days, tasks, weekSectionOrder, weekSectionWidths, hiddenFeat
     if (!baseVisibleOrder.includes(sourceId) || !baseVisibleOrder.includes(targetId)) return;
     setLayoutPreview(previewSectionLayout(baseVisibleOrder, weekSectionWidths, sourceId, targetId, placement, false));
   }
+  function startSectionPointer(event, sourceId) {
+    pointerDrag.current = { sourceId, startX: event.clientX, startY: event.clientY, targetId: "", placement: "full-before", active: false };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  }
+  function moveSectionPointer(event) {
+    const drag = pointerDrag.current;
+    if (!drag) return;
+    const distance = Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY);
+    if (!drag.active && distance < 8) return;
+    drag.active = true;
+    setDraggingSection(drag.sourceId);
+    const target = document.elementFromPoint(event.clientX, event.clientY)?.closest("[data-layout-section]");
+    const targetId = target?.dataset.layoutSection;
+    if (!target || !targetId || targetId === drag.sourceId || !baseVisibleOrder.includes(targetId)) return;
+    drag.targetId = targetId;
+    drag.placement = "full-before";
+    previewMove(drag.sourceId, targetId, "full-before");
+  }
+  function finishSectionPointer() {
+    const drag = pointerDrag.current;
+    pointerDrag.current = null;
+    setDraggingSection("");
+    if (drag?.active && drag.targetId && drag.targetId !== drag.sourceId) {
+      onReorderSection(drag.sourceId, drag.targetId, "full-before");
+    }
+    setLayoutPreview(null);
+  }
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-5 pb-24">
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2" onPointerMove={moveSectionPointer} onPointerUp={finishSectionPointer} onPointerCancel={finishSectionPointer}>
         {visibleOrder.map((id) => (
-          <TodaySection key={id} id={id} onMove={onReorderSection} onPreview={previewMove} onClearPreview={() => setLayoutPreview(null)} allowSplit={false} className={sectionWidthClass(id, visibleWidths, sections[id].className || "")}>
+          <TodaySection key={id} id={id} onMove={onReorderSection} onPreview={previewMove} onClearPreview={() => setLayoutPreview(null)} onPointerStart={startSectionPointer} draggingId={draggingSection} allowSplit={false} className={sectionWidthClass(id, visibleWidths, sections[id].className || "")}>
             {sections[id].content}
           </TodaySection>
         ))}
