@@ -94,13 +94,13 @@ const BETA_FEATURE_OPTIONS = [
   { id: "todaysConsiderations", label: "Today's Considerations", beta: true },
 ];
 const THEME_OPTIONS = [
-  { id: "blue", label: "Blue", accent: "#3577DE", header: "#112849", soft: "#EFF6FF", ring: "#BFDBFE" },
-  { id: "red", label: "Red", accent: "#DC2626", header: "#3F1010", soft: "#FEF2F2", ring: "#FECACA" },
-  { id: "orange", label: "Orange", accent: "#EA580C", header: "#431407", soft: "#FFF7ED", ring: "#FED7AA" },
-  { id: "purple", label: "Purple", accent: "#7C3AED", header: "#2E1065", soft: "#F5F3FF", ring: "#DDD6FE" },
-  { id: "pink", label: "Pink", accent: "#DB2777", header: "#500724", soft: "#FDF2F8", ring: "#FBCFE8" },
-  { id: "brown", label: "Brown", accent: "#8B5E34", header: "#2D1B12", soft: "#F8F3ED", ring: "#D8C3A8" },
-  { id: "black", label: "Black", accent: "#111827", header: "#030712", soft: "#F3F4F6", ring: "#D1D5DB" },
+  { id: "blue", label: "Blue", accent: "#3577DE", header: "#2563EB", soft: "#EFF6FF", ring: "#BFDBFE" },
+  { id: "red", label: "Red", accent: "#DC2626", header: "#DC2626", soft: "#FEF2F2", ring: "#FECACA" },
+  { id: "orange", label: "Orange", accent: "#EA580C", header: "#EA580C", soft: "#FFF7ED", ring: "#FED7AA" },
+  { id: "purple", label: "Purple", accent: "#7C3AED", header: "#7C3AED", soft: "#F5F3FF", ring: "#DDD6FE" },
+  { id: "pink", label: "Pink", accent: "#DB2777", header: "#DB2777", soft: "#FDF2F8", ring: "#FBCFE8" },
+  { id: "brown", label: "Brown", accent: "#8B5E34", header: "#8B5E34", soft: "#F8F3ED", ring: "#D8C3A8" },
+  { id: "black", label: "Black", accent: "#111827", header: "#111827", soft: "#F3F4F6", ring: "#D1D5DB" },
 ];
 const DEFAULT_THEME_ID = "blue";
 const GENDER_OPTIONS = ["Prefer not to say", "Female", "Male", "Non-binary", "Other"];
@@ -293,7 +293,7 @@ function taskFromRecurring(template, dateKey) {
 }
 function categoryStyle(category) {
   const styles = {
-    Work: "bg-blue-50 text-blue-700",
+    Work: "bg-[var(--theme-soft)] text-[var(--theme-accent)]",
     Personal: "bg-violet-50 text-violet-700",
     Home: "bg-emerald-50 text-emerald-700",
     Health: "bg-amber-50 text-amber-700",
@@ -449,7 +449,7 @@ function Ring({ value, size = 70, dark = false }) {
       }}
     >
       <div
-        className={`absolute rounded-full ${dark ? "bg-[#112849]" : "bg-white"}`}
+        className={`absolute rounded-full ${dark ? "bg-[var(--theme-header)]" : "bg-white"}`}
         style={{ width: size - 16, height: size - 16 }}
       />
       <span className={`relative text-sm font-bold ${dark ? "text-white" : "text-[#112849]"}`}>{clamped}%</span>
@@ -590,7 +590,7 @@ function TaskRow({ task, onToggle, onToggleChecklistItem, onRemove, onEdit, onRe
                 onTouchStart={(event) => { const anchor = event.currentTarget; touchTimer.current = setTimeout(() => openNote(anchor), 450); }}
                 onTouchEnd={() => { if (touchTimer.current) clearTimeout(touchTimer.current); }}
                 onClick={(event) => { event.stopPropagation(); noteOpen ? setNoteOpen(false) : openNote(event.currentTarget); }}
-                className="grid h-5 w-5 place-items-center rounded-md bg-slate-100 text-slate-500 hover:bg-blue-50 hover:text-[var(--theme-accent)]"
+                className="grid h-5 w-5 place-items-center rounded-md bg-slate-100 text-slate-500 hover:bg-[var(--theme-soft)] hover:text-[var(--theme-accent)]"
                 aria-label="Show task note"
               >
                 <SquarePen size={13} />
@@ -598,7 +598,7 @@ function TaskRow({ task, onToggle, onToggleChecklistItem, onRemove, onEdit, onRe
             </span>
           )}
           {showWebsite && website && (
-            <a href={website} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} className="grid h-5 w-5 shrink-0 place-items-center rounded-md bg-blue-50 text-[var(--theme-accent)] hover:bg-blue-100" aria-label="Open task website">
+            <a href={website} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} className="grid h-5 w-5 shrink-0 place-items-center rounded-md bg-[var(--theme-soft)] text-[var(--theme-accent)] hover:bg-[var(--theme-ring)]" aria-label="Open task website">
               <ExternalLink size={13} />
             </a>
           )}
@@ -610,14 +610,14 @@ function TaskRow({ task, onToggle, onToggleChecklistItem, onRemove, onEdit, onRe
             <button
               type="button"
               onClick={(event) => { event.stopPropagation(); setChecklistOpen((open) => !open); }}
-              className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-[var(--theme-accent)] ring-1 ring-blue-100 hover:bg-blue-100"
+              className="inline-flex items-center gap-1 rounded-full bg-[var(--theme-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--theme-accent)] ring-1 ring-[var(--theme-ring)] hover:bg-[var(--theme-ring)]"
               aria-label={checklistOpen ? "Hide task checklist" : "Show task checklist"}
               title={checklistOpen ? "Hide checklist" : "Show checklist"}
             >
               <ListChecks size={11} /> {listStats.done}/{listStats.total}
             </button>
           ) : null}
-          {task.recurringId && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">Repeats</span>}
+          {task.recurringId && <span className="rounded-full bg-[var(--theme-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--theme-accent)]">Repeats</span>}
           {task.important && !task.done && <span className="rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-semibold text-orange-700">Important</span>}
         </div>
         {checklistOpen && (
@@ -639,7 +639,7 @@ function TaskRow({ task, onToggle, onToggleChecklistItem, onRemove, onEdit, onRe
       {(onEdit || onReframe || onMoveTomorrow || onMoveTomorrowPenalty || onRemove) && (
         <div className={`${compact ? "absolute right-1 top-1 rounded-lg bg-white/95 shadow-sm ring-1 ring-slate-200" : "flex shrink-0"} flex items-center gap-1 opacity-100 transition sm:opacity-0 sm:group-hover/task:opacity-100`}>
           {onReframe && (
-            <button onClick={(event) => { event.stopPropagation(); onReframe(task); }} className="grid h-7 w-7 place-items-center rounded-lg text-slate-400 hover:bg-blue-50 hover:text-[var(--theme-accent)]" aria-label="Reframe task" title="Reframe">
+            <button onClick={(event) => { event.stopPropagation(); onReframe(task); }} className="grid h-7 w-7 place-items-center rounded-lg text-slate-400 hover:bg-[var(--theme-soft)] hover:text-[var(--theme-accent)]" aria-label="Reframe task" title="Reframe">
               <Sparkles size={14} />
             </button>
           )}
@@ -649,7 +649,7 @@ function TaskRow({ task, onToggle, onToggleChecklistItem, onRemove, onEdit, onRe
             </button>
           )}
           {onMoveTomorrow && (
-            <button onClick={(event) => { event.stopPropagation(); onMoveTomorrow(task.id); }} className="grid h-7 w-7 place-items-center rounded-lg text-slate-400 hover:bg-blue-50 hover:text-[var(--theme-accent)]" aria-label="Move task to tomorrow" title="Move to tomorrow">
+            <button onClick={(event) => { event.stopPropagation(); onMoveTomorrow(task.id); }} className="grid h-7 w-7 place-items-center rounded-lg text-slate-400 hover:bg-[var(--theme-soft)] hover:text-[var(--theme-accent)]" aria-label="Move task to tomorrow" title="Move to tomorrow">
               <ArrowRight size={15} />
             </button>
           )}
@@ -667,7 +667,7 @@ function TaskRow({ task, onToggle, onToggleChecklistItem, onRemove, onEdit, onRe
       )}
       {noteOpen && createPortal((
         <div
-          className="fixed z-[80] max-w-[calc(100vw-1.5rem)] rounded-xl bg-[#112849] p-3 text-xs font-medium leading-5 text-white shadow-2xl"
+          className="fixed z-[80] max-w-[calc(100vw-1.5rem)] rounded-xl bg-[var(--theme-header)] p-3 text-xs font-medium leading-5 text-white shadow-2xl"
           style={{ left: notePosition.left, top: notePosition.top, width: Math.min(280, window.innerWidth - 24) }}
         >
           {task.notes}
@@ -691,12 +691,12 @@ function Header({ activeWeek, setActiveWeek, onProfile, points }) {
       <div className="mx-auto grid max-w-none grid-cols-[1fr_auto] items-center gap-3 md:grid-cols-[1fr_auto_1fr] 2xl:max-w-[1800px]">
         <div className="justify-self-start"><Logo /></div>
         <div className="relative order-3 col-span-2 flex w-full items-center justify-between rounded-xl bg-white/10 p-1 md:order-none md:col-span-1 md:w-[280px] md:justify-self-center">
-          <button onClick={() => setActiveWeek(addDays(activeWeek, -7))} className="grid h-9 w-9 place-items-center rounded-lg text-blue-100 hover:bg-white/10"><ChevronLeft size={20} /></button>
+          <button onClick={() => setActiveWeek(addDays(activeWeek, -7))} className="grid h-9 w-9 place-items-center rounded-lg text-white/85 hover:bg-white/10"><ChevronLeft size={20} /></button>
           <button onClick={() => setPickerOpen((open) => !open)} className="rounded-lg px-4 py-1 text-center hover:bg-white/10">
-            <div className="text-[10px] uppercase tracking-widest text-blue-200/70">Week of</div>
+            <div className="text-[10px] uppercase tracking-widest text-white/70">Week of</div>
             <div className="text-sm font-semibold">{pretty(activeWeek, { day: "numeric", month: "long" })}</div>
           </button>
-          <button onClick={() => setActiveWeek(addDays(activeWeek, 7))} className="grid h-9 w-9 place-items-center rounded-lg text-blue-100 hover:bg-white/10"><ChevronRight size={20} /></button>
+          <button onClick={() => setActiveWeek(addDays(activeWeek, 7))} className="grid h-9 w-9 place-items-center rounded-lg text-white/85 hover:bg-white/10"><ChevronRight size={20} /></button>
           {pickerOpen && (
             <div className="absolute left-1/2 top-12 z-30 w-64 -translate-x-1/2 rounded-2xl bg-white p-4 text-slate-900 shadow-2xl ring-1 ring-slate-200">
               <div className="text-sm font-bold text-[#112849]">Jump to week</div>
@@ -818,9 +818,9 @@ function ProfileSetupPage({ profile, onSave, onSignOut }) {
     <div className="min-h-screen bg-[#F3F6FB] px-4 py-8 text-slate-900 sm:px-8">
       <div className="mx-auto max-w-2xl">
         <Logo />
-        <div className="mt-6 rounded-3xl bg-[#112849] p-5 text-white shadow-sm">
+        <div className="mt-6 rounded-3xl bg-[var(--theme-header)] p-5 text-white shadow-sm">
           <h1 className="text-2xl font-bold tracking-tight">Set up your profile</h1>
-          <p className="mt-2 text-sm leading-6 text-blue-100/75">This helps ADHDeeds make AI suggestions more relevant. Everything here is optional, but saving this step turns on your workspace.</p>
+          <p className="mt-2 text-sm leading-6 text-white/75">This helps ADHDeeds make AI suggestions more relevant. Everything here is optional, but saving this step turns on your workspace.</p>
         </div>
         <div className="mt-4">
           <ProfileForm profile={profile} onSave={onSave} />
@@ -932,7 +932,7 @@ function ProfileSheet({ open, onClose, session, authLoading, syncStatus, notific
                     type="button"
                     onClick={onEnableNotifications}
                     disabled={!notificationSupported || notificationsEnabled}
-                    className="mt-3 rounded-xl bg-blue-50 px-3 py-2 text-xs font-semibold text-[var(--theme-accent)] ring-1 ring-blue-100 disabled:bg-slate-100 disabled:text-slate-400 disabled:ring-slate-200"
+                    className="mt-3 rounded-xl bg-[var(--theme-soft)] px-3 py-2 text-xs font-semibold text-[var(--theme-accent)] ring-1 ring-[var(--theme-ring)] disabled:bg-slate-100 disabled:text-slate-400 disabled:ring-slate-200"
                   >
                     {!notificationSupported ? "Not supported here" : notificationsEnabled ? "Notifications on" : "Enable notifications"}
                   </button>
@@ -1024,11 +1024,11 @@ function DailyBars({ days, tasks }) {
 }
 function NudgeCard({ task, category, onAskOpinion }) {
   return (
-    <div className="rounded-2xl bg-[#112849] p-4 text-white shadow-sm">
-      <div className="text-[11px] font-semibold uppercase tracking-[.12em] text-blue-200/60">Worth doing next</div>
+    <div className="rounded-2xl bg-[var(--theme-header)] p-4 text-white shadow-sm">
+      <div className="text-[11px] font-semibold uppercase tracking-[.12em] text-white/65">Worth doing next</div>
       {category && <div className="mt-2 inline-flex rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-semibold">{category}</div>}
       <div className="mt-3 text-[17px] font-semibold leading-tight">{task.name}</div>
-      <p className="mt-2 text-xs leading-5 text-blue-100/70">{task.important ? "Marked important. Clearing this would make the week feel lighter." : "A good task to move forward while it is visible."}</p>
+      <p className="mt-2 text-xs leading-5 text-white/75">{task.important ? "Marked important. Clearing this would make the week feel lighter." : "A good task to move forward while it is visible."}</p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <span className="inline-flex rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold">{task.points} points</span>
         {onAskOpinion && (
@@ -1124,11 +1124,11 @@ function TodayConsiderationsCard({ today, tasks, habits, profile, aiAccessToken 
         <div>
           <div className="flex items-center gap-2 text-sm font-bold text-[#112849]">
             <Sparkles size={16} className="text-[var(--theme-accent)]" /> Today's Considerations
-            <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[var(--theme-accent)] ring-1 ring-blue-100">Beta</span>
+            <span className="rounded-full bg-[var(--theme-soft)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[var(--theme-accent)] ring-1 ring-[var(--theme-ring)]">Beta</span>
           </div>
           <p className="mt-1 text-xs text-slate-400">Weather, task load, and rut prevention.</p>
         </div>
-        <button onClick={refresh} className="rounded-xl bg-blue-50 px-3 py-2 text-xs font-semibold text-[var(--theme-accent)] ring-1 ring-blue-100">Refresh</button>
+        <button onClick={refresh} className="rounded-xl bg-[var(--theme-soft)] px-3 py-2 text-xs font-semibold text-[var(--theme-accent)] ring-1 ring-[var(--theme-ring)]">Refresh</button>
       </div>
       <div className="mt-3 space-y-2">
         {items.map((item, index) => (
@@ -1137,7 +1137,7 @@ function TodayConsiderationsCard({ today, tasks, habits, profile, aiAccessToken 
             <div className="mt-1 text-sm leading-5 text-slate-700">{item.text}</div>
           </div>
         ))}
-        {visible.rut && <div className="rounded-xl bg-blue-50 p-3 text-sm leading-5 text-[#112849] ring-1 ring-blue-100">{visible.rut}</div>}
+        {visible.rut && <div className="rounded-xl bg-[var(--theme-soft)] p-3 text-sm leading-5 text-[#112849] ring-1 ring-[var(--theme-ring)]">{visible.rut}</div>}
         {visible.protect && <div className="text-xs font-semibold text-slate-400">Protect: <span className="text-[#112849]">{visible.protect}</span></div>}
         {status && <div className="text-xs font-medium text-slate-400">{status}</div>}
       </div>
@@ -1206,7 +1206,7 @@ function DailyPlanCard({ today, tasks, habits, aiAccessToken }) {
         </div>
       </div>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-        <button onClick={improvePlan} className="rounded-xl bg-blue-50 px-3 py-2 text-xs font-semibold text-[var(--theme-accent)] ring-1 ring-blue-100 hover:bg-blue-100">Improve with AI</button>
+        <button onClick={improvePlan} className="rounded-xl bg-[var(--theme-soft)] px-3 py-2 text-xs font-semibold text-[var(--theme-accent)] ring-1 ring-[var(--theme-ring)] hover:bg-[var(--theme-ring)]">Improve with AI</button>
         {aiStatus && <span className="text-xs font-semibold text-slate-400">{aiStatus}</span>}
       </div>
       <ol className="mt-4 space-y-2">
@@ -1232,7 +1232,7 @@ function DailyPlanCard({ today, tasks, habits, aiAccessToken }) {
               setDragPlanIndex(null);
             }}
             onDragEnd={() => setDragPlanIndex(null)}
-            className={`flex cursor-grab gap-3 rounded-xl px-3 py-2 text-sm text-slate-700 active:cursor-grabbing ${dragPlanIndex === index ? "bg-blue-50 ring-1 ring-blue-100" : "bg-slate-50"}`}
+            className={`flex cursor-grab gap-3 rounded-xl px-3 py-2 text-sm text-slate-700 active:cursor-grabbing ${dragPlanIndex === index ? "bg-[var(--theme-soft)] ring-1 ring-[var(--theme-ring)]" : "bg-slate-50"}`}
           >
             <span className="font-bold text-[var(--theme-accent)]">{index + 1}</span>
             <span>{item}</span>
@@ -1342,7 +1342,7 @@ function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, 
               />
             )) : <p className="p-4 text-sm text-slate-400">Nothing planned today.</p>}
           </div>
-          <button onClick={() => onAddTask(selectedKey)} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-50 py-3 text-sm font-semibold text-[var(--theme-accent)] ring-1 ring-blue-100 hover:bg-blue-100">
+          <button onClick={() => onAddTask(selectedKey)} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--theme-soft)] py-3 text-sm font-semibold text-[var(--theme-accent)] ring-1 ring-[var(--theme-ring)] hover:bg-[var(--theme-ring)]">
             <Plus size={16} /> Add task
           </button>
         </div>
@@ -1421,7 +1421,7 @@ function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, 
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4 pb-24">
       <div
-        className="rounded-3xl bg-[#112849] p-5 text-white shadow-sm"
+        className="rounded-3xl bg-[var(--theme-header)] p-5 text-white shadow-sm"
         onTouchStart={(event) => { touchStartX.current = event.touches[0]?.clientX ?? null; }}
         onTouchEnd={(event) => {
           if (touchStartX.current === null) return;
@@ -1434,20 +1434,20 @@ function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, 
       >
         <div className="flex justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <div className="text-xs font-medium text-blue-100/70">{isToday ? "Today" : "Selected day"}</div>
+            <div className="text-xs font-medium text-white/75">{isToday ? "Today" : "Selected day"}</div>
             <div className="mt-1 grid max-w-sm grid-cols-[2.25rem_minmax(8rem,1fr)_2.25rem] items-center gap-3">
-              <button onClick={onPreviousDay} className="grid h-9 w-9 place-items-center rounded-xl bg-white/10 text-blue-100 hover:bg-white/15" aria-label="Previous day"><ChevronLeft size={18} /></button>
+              <button onClick={onPreviousDay} className="grid h-9 w-9 place-items-center rounded-xl bg-white/10 text-white/85 hover:bg-white/15" aria-label="Previous day"><ChevronLeft size={18} /></button>
               <button onClick={onJumpToday} disabled={isToday} className="min-w-0 text-center disabled:cursor-default" aria-label="Jump to today">
                 <h2 className="truncate text-2xl font-bold tracking-tight">{pretty(selectedDate, { weekday: "long" })}</h2>
-                <p className="text-sm text-blue-100/70">{pretty(selectedDate, { day: "numeric", month: "long" })}</p>
+                <p className="text-sm text-white/75">{pretty(selectedDate, { day: "numeric", month: "long" })}</p>
               </button>
-              <button onClick={onNextDay} className="grid h-9 w-9 place-items-center rounded-xl bg-white/10 text-blue-100 hover:bg-white/15" aria-label="Next day"><ChevronRight size={18} /></button>
+              <button onClick={onNextDay} className="grid h-9 w-9 place-items-center rounded-xl bg-white/10 text-white/85 hover:bg-white/15" aria-label="Next day"><ChevronRight size={18} /></button>
             </div>
           </div>
           <Ring value={progress} size={78} dark />
         </div>
-        <div className="mt-5 flex items-center gap-2 border-t border-white/10 pt-4 text-sm text-blue-100/80">
-          <Flame size={16} className="text-[#6EA8FF]" /> <strong className="text-white">{points}</strong> points this week
+        <div className="mt-5 flex items-center gap-2 border-t border-white/10 pt-4 text-sm text-white/80">
+          <Flame size={16} className="text-white" /> <strong className="text-white">{points}</strong> points this week
         </div>
       </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -1479,10 +1479,10 @@ function DayCard({ day, tasks, onToggle, onToggleChecklistItem, onRemove, onEdit
       }}
       className={`min-w-[300px] overflow-hidden rounded-2xl bg-white shadow-sm ring-1 transition sm:min-w-[330px] lg:min-w-0 ${dragOver ? "ring-2 ring-[var(--theme-accent)]" : isToday ? "ring-2 ring-[var(--theme-accent)]" : "ring-slate-200/70"}`}
     >
-      <div className={`${isToday ? "bg-[var(--theme-accent)]" : "bg-[#112849]"} flex justify-between px-4 py-3.5 text-white`}>
+      <div className={`${isToday ? "bg-[var(--theme-accent)]" : "bg-[var(--theme-header)]"} flex justify-between px-4 py-3.5 text-white`}>
         <div>
           <div className="text-[13px] font-bold uppercase tracking-wide">{pretty(day, { weekday: "long" })}</div>
-          <div className="mt-1 text-xs text-blue-100/75">{pretty(day)}{isToday ? " · Today" : ""}</div>
+          <div className="mt-1 text-xs text-white/75">{pretty(day)}{isToday ? " · Today" : ""}</div>
         </div>
         <span className="text-sm font-semibold">{pct}%</span>
       </div>
@@ -1505,7 +1505,7 @@ function DayCard({ day, tasks, onToggle, onToggleChecklistItem, onRemove, onEdit
             />
           )) : <div className="pt-8 text-center text-xs text-slate-400">Drop tasks here</div>}
         </div>
-        <button onClick={() => onAddTask(dayKey)} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-50 py-2.5 text-xs font-semibold text-[var(--theme-accent)] ring-1 ring-blue-100 hover:bg-blue-100">
+        <button onClick={() => onAddTask(dayKey)} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--theme-soft)] py-2.5 text-xs font-semibold text-[var(--theme-accent)] ring-1 ring-[var(--theme-ring)] hover:bg-[var(--theme-ring)]">
           <Plus size={15} /> Add task
         </button>
       </div>
@@ -1545,7 +1545,7 @@ function MobileWeekTask({ task, days, onToggle, onToggleChecklistItem, onRemove,
                     onMoveTask(task.id, dayKey);
                     setMoving(false);
                   }}
-                  className={`rounded-lg px-1 py-2 text-center text-[11px] font-bold ring-1 ${current ? "bg-[#112849] text-white ring-[#112849]" : "bg-white text-slate-500 ring-slate-200"}`}
+                  className={`rounded-lg px-1 py-2 text-center text-[11px] font-bold ring-1 ${current ? "bg-[var(--theme-header)] text-white ring-[var(--theme-header)]" : "bg-white text-slate-500 ring-slate-200"}`}
                 >
                   <div>{pretty(day, { weekday: "short" }).slice(0, 1)}</div>
                   <div>{pretty(day, { day: "numeric" })}</div>
@@ -1602,7 +1602,7 @@ function WeekView({ days, tasks, weekSectionOrder, weekSectionWidths, hiddenFeat
               const isSelected = selectedDay === dayKey;
               const isToday = isoDate(today) === dayKey;
               return (
-                <button key={dayKey} onClick={() => setSelectedDay(dayKey)} className={`rounded-xl px-1 py-2 text-center ring-1 transition ${isSelected ? "bg-[#112849] text-white ring-[#112849]" : "bg-white text-slate-500 ring-slate-200"}`}>
+                <button key={dayKey} onClick={() => setSelectedDay(dayKey)} className={`rounded-xl px-1 py-2 text-center ring-1 transition ${isSelected ? "bg-[var(--theme-header)] text-white ring-[var(--theme-header)]" : "bg-white text-slate-500 ring-slate-200"}`}>
                   <div className="text-[10px] font-bold uppercase">{pretty(day, { weekday: "short" }).slice(0, 1)}</div>
                   <div className="mt-1 text-sm font-bold">{pretty(day, { day: "numeric" })}</div>
                   <div className={`mx-auto mt-1 h-1.5 w-1.5 rounded-full ${dayTasks.length ? isSelected ? "bg-white" : "bg-[var(--theme-accent)]" : isToday ? "bg-amber-400" : "bg-transparent"}`} />
@@ -1635,7 +1635,7 @@ function WeekView({ days, tasks, weekSectionOrder, weekSectionWidths, hiddenFeat
                 />
               )) : <div className="p-5 text-center text-sm text-slate-400">No tasks planned.</div>}
             </div>
-            <button onClick={() => onAddTask(selectedDay)} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-50 py-3 text-sm font-semibold text-[var(--theme-accent)] ring-1 ring-blue-100 hover:bg-blue-100">
+            <button onClick={() => onAddTask(selectedDay)} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--theme-soft)] py-3 text-sm font-semibold text-[var(--theme-accent)] ring-1 ring-[var(--theme-ring)] hover:bg-[var(--theme-ring)]">
               <Plus size={16} /> Add task
             </button>
           </div>
@@ -1741,7 +1741,7 @@ function HabitsView({ days, habits, onToggle, onAdd, onEdit, onRemove }) {
               <div>
                 <h3 className="font-semibold text-[#112849]">{habit.name}</h3>
                 <p className="mt-1 text-xs text-slate-400">{habit.detail} · {habit.points} points</p>
-                {habit.narrative && <p className="mt-3 max-w-2xl rounded-xl bg-blue-50 px-3 py-2 text-sm leading-5 text-[#112849] ring-1 ring-blue-100">{habit.narrative}</p>}
+                {habit.narrative && <p className="mt-3 max-w-2xl rounded-xl bg-[var(--theme-soft)] px-3 py-2 text-sm leading-5 text-[#112849] ring-1 ring-[var(--theme-ring)]">{habit.narrative}</p>}
               </div>
               <div className="flex items-start gap-2">
                 <div className="text-right"><div className="text-lg font-bold text-[#112849]">{completed} / {target}</div><div className="text-[11px] text-slate-400">this week</div></div>
@@ -1814,7 +1814,7 @@ function BrainDumpsterView({ items, categories, onAddItems, onRemoveItem, onConv
               <button
                 onClick={() => onConvertItem(item)}
                 disabled={!categories.length}
-                className="rounded-lg bg-blue-50 px-3 py-2 text-xs font-semibold text-[var(--theme-accent)] ring-1 ring-blue-100 disabled:bg-slate-100 disabled:text-slate-400 disabled:ring-slate-200"
+                className="rounded-lg bg-[var(--theme-soft)] px-3 py-2 text-xs font-semibold text-[var(--theme-accent)] ring-1 ring-[var(--theme-ring)] disabled:bg-slate-100 disabled:text-slate-400 disabled:ring-slate-200"
               >
                 Make task
               </button>
@@ -1827,9 +1827,9 @@ function BrainDumpsterView({ items, categories, onAddItems, onRemoveItem, onConv
         {!items.length && <div className="p-8 text-center text-sm text-slate-400">Nothing dumped yet.</div>}
       </div>
       {!categories.length && (
-        <div className="rounded-2xl bg-blue-50 p-4 text-sm text-[#112849] ring-1 ring-blue-100">
+        <div className="rounded-2xl bg-[var(--theme-soft)] p-4 text-sm text-[#112849] ring-1 ring-[var(--theme-ring)]">
           Create a category before turning dumped items into tasks.
-          <button onClick={onAddCategory} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-white py-3 text-sm font-semibold text-[var(--theme-accent)] ring-1 ring-blue-100">
+          <button onClick={onAddCategory} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-white py-3 text-sm font-semibold text-[var(--theme-accent)] ring-1 ring-[var(--theme-ring)]">
             <Plus size={16} /> Add Category
           </button>
         </div>
@@ -1854,7 +1854,7 @@ function AllTasksView({ tasks, categories, onAddCategory, onReorderCategory, onT
       </div>
       <div className="flex items-center gap-2 overflow-x-auto px-px pb-1 pt-1">
         <span className="shrink-0 text-xs font-semibold uppercase tracking-[.12em] text-slate-400">Categories</span>
-        <button onClick={() => setFilter("All")} className={`whitespace-nowrap rounded-full px-4 py-2 text-xs font-semibold transition ${filter === "All" ? "bg-[#112849] text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>All</button>
+        <button onClick={() => setFilter("All")} className={`whitespace-nowrap rounded-full px-4 py-2 text-xs font-semibold transition ${filter === "All" ? "bg-[var(--theme-header)] text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>All</button>
         {categories.map((cat) => (
           <button
             key={cat}
@@ -1876,13 +1876,13 @@ function AllTasksView({ tasks, categories, onAddCategory, onReorderCategory, onT
             }}
             onDragEnd={() => setCategoryDragOver("")}
             onClick={() => setFilter(cat)}
-            className={`cursor-grab whitespace-nowrap rounded-full px-4 py-2 text-xs font-semibold transition active:cursor-grabbing ${filter === cat ? "bg-[#112849] text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"} ${categoryDragOver === cat ? "outline outline-2 outline-[var(--theme-accent)] outline-offset-2" : ""}`}
+            className={`cursor-grab whitespace-nowrap rounded-full px-4 py-2 text-xs font-semibold transition active:cursor-grabbing ${filter === cat ? "bg-[var(--theme-header)] text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"} ${categoryDragOver === cat ? "outline outline-2 outline-[var(--theme-accent)] outline-offset-2" : ""}`}
             title="Drag to reorder"
           >
             {cat}
           </button>
         ))}
-        <button onClick={onAddCategory} className="flex shrink-0 items-center gap-1 rounded-full bg-blue-50 px-4 py-2 text-xs font-semibold text-[var(--theme-accent)] ring-1 ring-blue-100"><Plus size={14} /> Add Category</button>
+        <button onClick={onAddCategory} className="flex shrink-0 items-center gap-1 rounded-full bg-[var(--theme-soft)] px-4 py-2 text-xs font-semibold text-[var(--theme-accent)] ring-1 ring-[var(--theme-ring)]"><Plus size={14} /> Add Category</button>
       </div>
       <div className="flex items-center justify-between rounded-2xl bg-white px-4 py-3 shadow-sm ring-1 ring-slate-200/70">
         <div>
@@ -2005,7 +2005,7 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
             <div className="mb-5 flex items-center justify-between"><h2 className="text-xl font-bold tracking-tight text-[#112849]">{task ? "Edit task" : "Add a task"}</h2><button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-slate-100 text-slate-500"><X size={18}/></button></div>
             <div className="space-y-4">
               <label className="block"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Task</span><input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="What needs doing?" className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[var(--theme-accent)]" /></label>
-              <button type="button" onClick={createBreakdown} className="flex w-full items-center justify-center gap-2 rounded-xl border border-blue-100 bg-blue-50 py-3 text-sm font-semibold text-[#112849]"><Sparkles size={16} /> Break into smaller tasks</button>
+              <button type="button" onClick={createBreakdown} className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--theme-ring)] bg-[var(--theme-soft)] py-3 text-sm font-semibold text-[#112849]"><Sparkles size={16} /> Break into smaller tasks</button>
               <div className="rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-200/70">
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -2018,7 +2018,7 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
                       setChecklistOpen((open) => checklist.length ? !open : true);
                       if (!checklist.length) addChecklistItem();
                     }}
-                    className="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-[var(--theme-accent)] ring-1 ring-blue-100"
+                    className="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-[var(--theme-accent)] ring-1 ring-[var(--theme-ring)]"
                   >
                     {checklist.length ? checklistOpen ? "Hide List" : "Open List" : "Create List"}
                   </button>
@@ -2036,7 +2036,7 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
                     ))}
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <button type="button" onClick={() => addChecklistItem()} className="rounded-xl bg-white py-2.5 text-sm font-semibold text-slate-600 ring-1 ring-slate-200">Add item</button>
-                      <button type="button" onClick={suggestChecklist} disabled={!name.trim()} className="flex items-center justify-center gap-2 rounded-xl bg-blue-50 py-2.5 text-sm font-semibold text-[var(--theme-accent)] ring-1 ring-blue-100 disabled:bg-slate-100 disabled:text-slate-400 disabled:ring-slate-200"><Sparkles size={15} /> Suggest list with AI</button>
+                      <button type="button" onClick={suggestChecklist} disabled={!name.trim()} className="flex items-center justify-center gap-2 rounded-xl bg-[var(--theme-soft)] py-2.5 text-sm font-semibold text-[var(--theme-accent)] ring-1 ring-[var(--theme-ring)] disabled:bg-slate-100 disabled:text-slate-400 disabled:ring-slate-200"><Sparkles size={15} /> Suggest list with AI</button>
                     </div>
                     {checklistStatus && <p className="text-xs font-medium text-slate-400">{checklistStatus}</p>}
                   </div>
@@ -2048,11 +2048,11 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
                   <div className="space-y-2">
                     {breakdown.map((item) => <div key={item.name} className="rounded-xl bg-white px-3 py-2 text-sm text-slate-700 ring-1 ring-slate-200">{item.name}</div>)}
                   </div>
-                  <button type="button" onClick={addBreakdownTasks} className="mt-3 w-full rounded-xl bg-[#112849] py-2.5 text-sm font-semibold text-white">Add these tasks</button>
+                  <button type="button" onClick={addBreakdownTasks} className="mt-3 w-full rounded-xl bg-[var(--theme-header)] py-2.5 text-sm font-semibold text-white">Add these tasks</button>
                 </div>
               )}
               <div className="grid grid-cols-2 gap-3">
-                <label><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Category</span><select value={category} onChange={(e) => setCategory(e.target.value)} disabled={!categories.length} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none disabled:bg-slate-50 disabled:text-slate-400">{categories.length ? categories.map((item) => <option key={item}>{item}</option>) : <option>Create a category first</option>}</select><button type="button" onClick={onAddCategory} className="mt-2 rounded-lg bg-blue-50 px-2.5 py-1.5 text-[11px] font-semibold text-[var(--theme-accent)] ring-1 ring-blue-100">Add Category</button></label>
+                <label><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Category</span><select value={category} onChange={(e) => setCategory(e.target.value)} disabled={!categories.length} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none disabled:bg-slate-50 disabled:text-slate-400">{categories.length ? categories.map((item) => <option key={item}>{item}</option>) : <option>Create a category first</option>}</select><button type="button" onClick={onAddCategory} className="mt-2 rounded-lg bg-[var(--theme-soft)] px-2.5 py-1.5 text-[11px] font-semibold text-[var(--theme-accent)] ring-1 ring-[var(--theme-ring)]">Add Category</button></label>
                 <label><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Day</span><select value={date} onChange={(e) => setDate(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none">{!days.some((day) => isoDate(day) === date) && <option value={date}>{new Date(`${date}T00:00:00`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}</option>}{days.map((day) => <option key={isoDate(day)} value={isoDate(day)}>{pretty(day, { weekday: "short", day: "numeric", month: "short" })}</option>)}</select><button type="button" onClick={() => setDatePickerOpen((open) => !open)} className="mt-2 rounded-lg bg-slate-50 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200">Not This Week?</button></label>
               </div>
               {datePickerOpen && (
@@ -2071,7 +2071,7 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
                   </select>
                 </label>
               )}
-              <div className="grid grid-cols-3 gap-2">{POINT_OPTIONS.map((option) => <button type="button" key={option.value} onClick={() => setPoints(option.value)} className={`rounded-xl border px-2 py-3 text-center ${points === option.value ? "border-[var(--theme-accent)] bg-blue-50 text-[#112849]" : "border-slate-200 text-slate-500"}`}><span className="block text-xs font-semibold">{option.label}</span><span className="mt-1 block text-[11px]">{option.value} pts</span></button>)}</div>
+              <div className="grid grid-cols-3 gap-2">{POINT_OPTIONS.map((option) => <button type="button" key={option.value} onClick={() => setPoints(option.value)} className={`rounded-xl border px-2 py-3 text-center ${points === option.value ? "border-[var(--theme-accent)] bg-[var(--theme-soft)] text-[#112849]" : "border-slate-200 text-slate-500"}`}><span className="block text-xs font-semibold">{option.label}</span><span className="mt-1 block text-[11px]">{option.value} pts</span></button>)}</div>
               <button type="button" onClick={() => setImportant(!important)} className="flex w-full items-center gap-3 rounded-xl bg-slate-50 p-3 text-left"><span className={`grid h-5 w-5 place-items-center rounded-md border ${important ? "border-[var(--theme-accent)] bg-[var(--theme-accent)] text-white" : "border-slate-300 text-transparent"}`}><Check size={13} /></span><span className="text-sm text-slate-700">Mark as important</span></button>
               <button type="submit" disabled={!category} className="w-full rounded-xl bg-[var(--theme-accent)] py-3.5 text-sm font-semibold text-white disabled:bg-slate-300">{task ? "Save changes" : "Add task"}</button>
             </div>
@@ -2191,8 +2191,8 @@ function AISheet({ insight, onClose, onAddFirstStep }) {
             <div className="mb-5 flex items-center justify-between"><h2 className="flex items-center gap-2 text-xl font-bold tracking-tight text-[#112849]"><Sparkles size={20} className="text-[var(--theme-accent)]" /> {insight.title}</h2><button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-slate-100 text-slate-500"><X size={18}/></button></div>
             <p className="text-sm leading-6 text-slate-600">{insight.note}</p>
             {insight.firstStep && (
-              <div className="mt-4 rounded-2xl bg-blue-50 p-4">
-                <div className="text-xs font-semibold uppercase tracking-wide text-blue-500">First step</div>
+              <div className="mt-4 rounded-2xl bg-[var(--theme-soft)] p-4">
+                <div className="text-xs font-semibold uppercase tracking-wide text-white/900">First step</div>
                 <div className="mt-2 text-sm font-semibold text-[#112849]">{insight.firstStep}</div>
                 <button onClick={onAddFirstStep} className="mt-4 w-full rounded-xl bg-[var(--theme-accent)] py-3 text-sm font-semibold text-white">Add first step as task</button>
               </div>
@@ -2207,10 +2207,10 @@ function AISheet({ insight, onClose, onAddFirstStep }) {
 function AIToast({ message, onClose }) {
   if (!message) return null;
   return (
-    <div className="fixed inset-x-4 bottom-24 z-30 mx-auto max-w-md rounded-2xl bg-[#112849] p-4 text-white shadow-xl sm:bottom-6">
+    <div className="fixed inset-x-4 bottom-24 z-30 mx-auto max-w-md rounded-2xl bg-[var(--theme-header)] p-4 text-white shadow-xl sm:bottom-6">
       <div className="flex items-start gap-3">
-        <Sparkles size={18} className="mt-0.5 shrink-0 text-[#6EA8FF]" />
-        <p className="flex-1 text-sm leading-5 text-blue-50">{message}</p>
+        <Sparkles size={18} className="mt-0.5 shrink-0 text-white" />
+        <p className="flex-1 text-sm leading-5 text-white/90">{message}</p>
         <button onClick={onClose} className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white/10"><X size={14} /></button>
       </div>
     </div>
