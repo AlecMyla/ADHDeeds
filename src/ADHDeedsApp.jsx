@@ -94,7 +94,7 @@ const BETA_FEATURE_OPTIONS = [
   { id: "todaysConsiderations", label: "Today's Considerations", beta: true },
 ];
 const THEME_OPTIONS = [
-  { id: "blue", label: "Blue", accent: "#3577DE", header: "#2563EB", soft: "#EFF6FF", ring: "#BFDBFE" },
+  { id: "blue", label: "Blue", accent: "#3577DE", header: "#112849", soft: "#EFF6FF", ring: "#BFDBFE" },
   { id: "red", label: "Red", accent: "#DC2626", header: "#DC2626", soft: "#FEF2F2", ring: "#FECACA" },
   { id: "orange", label: "Orange", accent: "#EA580C", header: "#EA580C", soft: "#FFF7ED", ring: "#FED7AA" },
   { id: "purple", label: "Purple", accent: "#7C3AED", header: "#7C3AED", soft: "#F5F3FF", ring: "#DDD6FE" },
