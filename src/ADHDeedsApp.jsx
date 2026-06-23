@@ -637,7 +637,7 @@ function TaskRow({ task, onToggle, onToggleChecklistItem, onRemove, onEdit, onRe
         )}
       </div>
       {(onEdit || onReframe || onMoveTomorrow || onMoveTomorrowPenalty || onRemove) && (
-        <div className={`${compact ? "absolute right-1 top-1 rounded-lg bg-white/95 shadow-sm ring-1 ring-slate-200" : "flex shrink-0"} flex items-center gap-1 opacity-100 transition sm:opacity-0 sm:group-hover/task:opacity-100`}>
+        <div className={`${compact ? "absolute right-1 top-7 rounded-lg bg-white/95 shadow-sm ring-1 ring-slate-200" : "flex shrink-0"} flex items-center gap-1 opacity-100 transition sm:opacity-0 sm:group-hover/task:opacity-100`}>
           {onReframe && (
             <button onClick={(event) => { event.stopPropagation(); onReframe(task); }} className="grid h-7 w-7 place-items-center rounded-lg text-slate-400 hover:bg-[var(--theme-soft)] hover:text-[var(--theme-accent)]" aria-label="Reframe task" title="Reframe">
               <Sparkles size={14} />
@@ -1568,6 +1568,16 @@ function WeekView({ days, tasks, weekSectionOrder, weekSectionWidths, hiddenFeat
   const done = tasks.filter((t) => t.done).length;
   const selectedDate = days.find((day) => isoDate(day) === selectedDay) || days[0];
   const selectedTasks = tasks.filter((task) => task.date === selectedDay);
+  const todayKey = isoDate(today);
+  const currentWeekIncludesToday = days.some((day) => isoDate(day) === todayKey);
+  const desktopWeekColumns = currentWeekIncludesToday
+    ? days.map((day) => {
+      const dayKey = isoDate(day);
+      if (dayKey < todayKey) return "minmax(118px, .72fr)";
+      if (dayKey === todayKey) return "minmax(250px, 1.55fr)";
+      return "minmax(160px, 1fr)";
+    }).join(" ")
+    : "repeat(7, minmax(0, 1fr))";
   function dragTask(event, taskId) {
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", taskId);
@@ -1643,7 +1653,7 @@ function WeekView({ days, tasks, weekSectionOrder, weekSectionWidths, hiddenFeat
             <h2 className="text-xl font-bold tracking-tight text-[#112849]">This week</h2>
             <div className="text-xs text-slate-400">Drag tasks between days</div>
           </div>
-          <div className="hidden lg:mx-0 lg:grid lg:grid-cols-7 lg:gap-3 lg:overflow-visible lg:px-0">
+          <div className="hidden lg:mx-0 lg:grid lg:gap-3 lg:overflow-visible lg:px-0" style={{ gridTemplateColumns: desktopWeekColumns }}>
             {days.map((day) => (
               <div className="snap-start lg:min-w-0" key={isoDate(day)}>
                 <DayCard
