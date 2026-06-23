@@ -37,7 +37,7 @@ import {
 } from "./supabaseClient";
 import { askAI } from "./aiClient";
 
-const BLUE = "#3577DE";
+const BLUE = "var(--theme-accent, #3577DE)";
 const LEGACY_STORAGE_KEY = "adhdiary_mobile_app_v1";
 const STORAGE_KEY = "adhdeeds_mobile_app_v1";
 const NOTIFICATIONS_KEY = "adhdeeds_notifications_enabled_v1";
@@ -93,6 +93,16 @@ const FEATURE_OPTIONS = [
 const BETA_FEATURE_OPTIONS = [
   { id: "todaysConsiderations", label: "Today's Considerations", beta: true },
 ];
+const THEME_OPTIONS = [
+  { id: "blue", label: "Blue", accent: "#3577DE", header: "#112849", soft: "#EFF6FF", ring: "#BFDBFE" },
+  { id: "red", label: "Red", accent: "#DC2626", header: "#3F1010", soft: "#FEF2F2", ring: "#FECACA" },
+  { id: "orange", label: "Orange", accent: "#EA580C", header: "#431407", soft: "#FFF7ED", ring: "#FED7AA" },
+  { id: "purple", label: "Purple", accent: "#7C3AED", header: "#2E1065", soft: "#F5F3FF", ring: "#DDD6FE" },
+  { id: "pink", label: "Pink", accent: "#DB2777", header: "#500724", soft: "#FDF2F8", ring: "#FBCFE8" },
+  { id: "brown", label: "Brown", accent: "#8B5E34", header: "#2D1B12", soft: "#F8F3ED", ring: "#D8C3A8" },
+  { id: "black", label: "Black", accent: "#111827", header: "#030712", soft: "#F3F4F6", ring: "#D1D5DB" },
+];
+const DEFAULT_THEME_ID = "blue";
 const GENDER_OPTIONS = ["Prefer not to say", "Female", "Male", "Non-binary", "Other"];
 const YES_NO_OPTIONS = ["Prefer not to say", "Yes", "No"];
 const ADHD_STATUS_OPTIONS = ["Prefer not to say", "Diagnosed", "Undiagnosed", "Exploring"];
@@ -216,6 +226,18 @@ function sectionFromPoint(clientX, clientY, sourceId, allowedIds) {
     })
     .sort((a, b) => a.distance - b.distance)[0]?.element || null;
 }
+function themeById(themeId) {
+  return THEME_OPTIONS.find((theme) => theme.id === themeId) || THEME_OPTIONS[0];
+}
+function themeStyle(themeId) {
+  const theme = themeById(themeId);
+  return {
+    "--theme-accent": theme.accent,
+    "--theme-header": theme.header,
+    "--theme-soft": theme.soft,
+    "--theme-ring": theme.ring,
+  };
+}
 function normalizeProfile(raw) {
   const fallback = defaultProfile();
   if (!raw || typeof raw !== "object") return fallback;
@@ -288,7 +310,7 @@ function seedData() {
     categories: DEFAULT_CATEGORIES,
     recurringTasks: [],
     profile: defaultProfile(),
-    ui: { todayOrder: TODAY_SECTION_ORDER, weekOrder: WEEK_SECTION_ORDER, todayWidths: {}, weekWidths: {}, hiddenFeatures: [], enabledFeatures: [] },
+    ui: { todayOrder: TODAY_SECTION_ORDER, weekOrder: WEEK_SECTION_ORDER, todayWidths: {}, weekWidths: {}, hiddenFeatures: [], enabledFeatures: [], theme: DEFAULT_THEME_ID },
   };
 }
 function normalizeData(raw) {
@@ -328,6 +350,7 @@ function normalizeData(raw) {
   const enabledFeatures = Array.isArray(raw.ui?.enabledFeatures)
     ? raw.ui.enabledFeatures.filter((item) => BETA_FEATURE_OPTIONS.some((option) => option.id === item))
     : [];
+  const theme = THEME_OPTIONS.some((option) => option.id === raw.ui?.theme) ? raw.ui.theme : DEFAULT_THEME_ID;
   const todayWidths = normalizeLayoutWidths(todayOrder, normalizeSectionWidths(raw.ui?.todayWidths, TODAY_SECTION_ORDER), true);
   const weekWidths = normalizeLayoutWidths(weekOrder, normalizeSectionWidths(raw.ui?.weekWidths, WEEK_SECTION_ORDER), false);
   const recurringCategories = recurringTasks.map((task) => task.category).filter(Boolean);
@@ -345,7 +368,7 @@ function normalizeData(raw) {
     brainDump,
     recurringTasks,
     profile: normalizeProfile(raw.profile),
-    ui: { ...(raw.ui || {}), todayOrder, weekOrder, todayWidths, weekWidths, hiddenFeatures, enabledFeatures },
+    ui: { ...(raw.ui || {}), todayOrder, weekOrder, todayWidths, weekWidths, hiddenFeatures, enabledFeatures, theme },
     categories,
   };
 }
@@ -550,7 +573,7 @@ function TaskRow({ task, onToggle, onToggleChecklistItem, onRemove, onEdit, onRe
         disabled={!task.done && hasChecklist && !checklistComplete}
         aria-label={!task.done && hasChecklist && !checklistComplete ? "Complete checklist items first" : task.done ? "Mark incomplete" : "Complete task"}
         className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md border transition ${
-          task.done ? "border-[#3577DE] bg-[#3577DE] text-white" : "border-slate-300 bg-white text-transparent"
+          task.done ? "border-[var(--theme-accent)] bg-[var(--theme-accent)] text-white" : "border-slate-300 bg-white text-transparent"
         } disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-transparent disabled:opacity-60`}
       >
         <Check size={13} strokeWidth={3} />
@@ -567,7 +590,7 @@ function TaskRow({ task, onToggle, onToggleChecklistItem, onRemove, onEdit, onRe
                 onTouchStart={(event) => { const anchor = event.currentTarget; touchTimer.current = setTimeout(() => openNote(anchor), 450); }}
                 onTouchEnd={() => { if (touchTimer.current) clearTimeout(touchTimer.current); }}
                 onClick={(event) => { event.stopPropagation(); noteOpen ? setNoteOpen(false) : openNote(event.currentTarget); }}
-                className="grid h-5 w-5 place-items-center rounded-md bg-slate-100 text-slate-500 hover:bg-blue-50 hover:text-[#3577DE]"
+                className="grid h-5 w-5 place-items-center rounded-md bg-slate-100 text-slate-500 hover:bg-blue-50 hover:text-[var(--theme-accent)]"
                 aria-label="Show task note"
               >
                 <SquarePen size={13} />
@@ -575,7 +598,7 @@ function TaskRow({ task, onToggle, onToggleChecklistItem, onRemove, onEdit, onRe
             </span>
           )}
           {showWebsite && website && (
-            <a href={website} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} className="grid h-5 w-5 shrink-0 place-items-center rounded-md bg-blue-50 text-[#3577DE] hover:bg-blue-100" aria-label="Open task website">
+            <a href={website} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} className="grid h-5 w-5 shrink-0 place-items-center rounded-md bg-blue-50 text-[var(--theme-accent)] hover:bg-blue-100" aria-label="Open task website">
               <ExternalLink size={13} />
             </a>
           )}
@@ -587,7 +610,7 @@ function TaskRow({ task, onToggle, onToggleChecklistItem, onRemove, onEdit, onRe
             <button
               type="button"
               onClick={(event) => { event.stopPropagation(); setChecklistOpen((open) => !open); }}
-              className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-[#3577DE] ring-1 ring-blue-100 hover:bg-blue-100"
+              className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-[var(--theme-accent)] ring-1 ring-blue-100 hover:bg-blue-100"
               aria-label={checklistOpen ? "Hide task checklist" : "Show task checklist"}
               title={checklistOpen ? "Hide checklist" : "Show checklist"}
             >
@@ -606,7 +629,7 @@ function TaskRow({ task, onToggle, onToggleChecklistItem, onRemove, onEdit, onRe
                 onClick={(event) => { event.stopPropagation(); onToggleChecklistItem?.(task.id, item.id); }}
                 className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-white"
               >
-                <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-md border ${item.done ? "border-[#3577DE] bg-[#3577DE] text-white" : "border-slate-300 text-transparent"}`}><Check size={13} strokeWidth={3} /></span>
+                <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-md border ${item.done ? "border-[var(--theme-accent)] bg-[var(--theme-accent)] text-white" : "border-slate-300 text-transparent"}`}><Check size={13} strokeWidth={3} /></span>
                 <span className={`text-xs leading-5 ${item.done ? "text-slate-400 line-through" : "text-slate-700"}`}>{item.text}</span>
               </button>
             ))}
@@ -616,17 +639,17 @@ function TaskRow({ task, onToggle, onToggleChecklistItem, onRemove, onEdit, onRe
       {(onEdit || onReframe || onMoveTomorrow || onMoveTomorrowPenalty || onRemove) && (
         <div className={`${compact ? "absolute right-1 top-1 rounded-lg bg-white/95 shadow-sm ring-1 ring-slate-200" : "flex shrink-0"} flex items-center gap-1 opacity-100 transition sm:opacity-0 sm:group-hover/task:opacity-100`}>
           {onReframe && (
-            <button onClick={(event) => { event.stopPropagation(); onReframe(task); }} className="grid h-7 w-7 place-items-center rounded-lg text-slate-400 hover:bg-blue-50 hover:text-[#3577DE]" aria-label="Reframe task" title="Reframe">
+            <button onClick={(event) => { event.stopPropagation(); onReframe(task); }} className="grid h-7 w-7 place-items-center rounded-lg text-slate-400 hover:bg-blue-50 hover:text-[var(--theme-accent)]" aria-label="Reframe task" title="Reframe">
               <Sparkles size={14} />
             </button>
           )}
           {onEdit && (
-            <button onClick={(event) => { event.stopPropagation(); onEdit(task); }} className="grid h-7 w-7 place-items-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-[#3577DE]" aria-label="Edit task" title="Edit">
+            <button onClick={(event) => { event.stopPropagation(); onEdit(task); }} className="grid h-7 w-7 place-items-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-[var(--theme-accent)]" aria-label="Edit task" title="Edit">
               <Pencil size={14} />
             </button>
           )}
           {onMoveTomorrow && (
-            <button onClick={(event) => { event.stopPropagation(); onMoveTomorrow(task.id); }} className="grid h-7 w-7 place-items-center rounded-lg text-slate-400 hover:bg-blue-50 hover:text-[#3577DE]" aria-label="Move task to tomorrow" title="Move to tomorrow">
+            <button onClick={(event) => { event.stopPropagation(); onMoveTomorrow(task.id); }} className="grid h-7 w-7 place-items-center rounded-lg text-slate-400 hover:bg-blue-50 hover:text-[var(--theme-accent)]" aria-label="Move task to tomorrow" title="Move to tomorrow">
               <ArrowRight size={15} />
             </button>
           )}
@@ -664,7 +687,7 @@ function Header({ activeWeek, setActiveWeek, onProfile, points }) {
   }
 
   return (
-    <header className="relative bg-[#112849] px-4 py-3 text-white sm:px-8">
+    <header className="relative bg-[var(--theme-header)] px-4 py-3 text-white sm:px-8">
       <div className="mx-auto grid max-w-none grid-cols-[1fr_auto] items-center gap-3 md:grid-cols-[1fr_auto_1fr] 2xl:max-w-[1800px]">
         <div className="justify-self-start"><Logo /></div>
         <div className="relative order-3 col-span-2 flex w-full items-center justify-between rounded-xl bg-white/10 p-1 md:order-none md:col-span-1 md:w-[280px] md:justify-self-center">
@@ -678,7 +701,7 @@ function Header({ activeWeek, setActiveWeek, onProfile, points }) {
             <div className="absolute left-1/2 top-12 z-30 w-64 -translate-x-1/2 rounded-2xl bg-white p-4 text-slate-900 shadow-2xl ring-1 ring-slate-200">
               <div className="text-sm font-bold text-[#112849]">Jump to week</div>
               <p className="mt-1 text-xs text-slate-400">Choose any date. ADHDeeds will open that week.</p>
-              <input type="date" value={isoDate(activeWeek)} onChange={(event) => pickDate(event.target.value)} className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#3577DE]" />
+              <input type="date" value={isoDate(activeWeek)} onChange={(event) => pickDate(event.target.value)} className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[var(--theme-accent)]" />
               <button onClick={() => setPickerOpen(false)} className="mt-3 w-full rounded-xl bg-slate-100 py-2 text-xs font-semibold text-slate-500">Close</button>
             </div>
           )}
@@ -743,9 +766,9 @@ function AuthPanel({ session, authLoading, syncStatus, onGoogleSignIn, onSignIn,
         </div>
       </div>
       <div className="grid gap-2">
-        <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" placeholder="Email" className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-[#3577DE]" />
-        <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" placeholder="Password" className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-[#3577DE]" />
-        <button type="submit" className="w-full rounded-xl bg-[#3577DE] px-4 py-3 text-sm font-semibold text-white">{mode === "signup" ? "Create account" : "Sign in"}</button>
+        <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" placeholder="Email" className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-[var(--theme-accent)]" />
+        <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" placeholder="Password" className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-[var(--theme-accent)]" />
+        <button type="submit" className="w-full rounded-xl bg-[var(--theme-accent)] px-4 py-3 text-sm font-semibold text-white">{mode === "signup" ? "Create account" : "Sign in"}</button>
       </div>
       <button type="button" onClick={onGoogleSignIn} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
         Continue with Google
@@ -777,15 +800,15 @@ function ProfileForm({ profile, onSave, compact = false }) {
         <p className="mt-1 text-xs leading-5 text-slate-400">Optional context for AI suggestions. Avoid adding sensitive detail you do not want used in planning prompts.</p>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block sm:col-span-2"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Name</span><input value={draft.name} onChange={(event) => update("name", event.target.value)} placeholder="What should ADHDeeds call you?" className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-[#3577DE]" /></label>
-        <label className="block"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Age</span><input value={draft.age} onChange={(event) => update("age", event.target.value.replace(/[^\d]/g, "").slice(0, 3))} inputMode="numeric" placeholder="Optional" className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-[#3577DE]" /></label>
+        <label className="block sm:col-span-2"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Name</span><input value={draft.name} onChange={(event) => update("name", event.target.value)} placeholder="What should ADHDeeds call you?" className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-[var(--theme-accent)]" /></label>
+        <label className="block"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Age</span><input value={draft.age} onChange={(event) => update("age", event.target.value.replace(/[^\d]/g, "").slice(0, 3))} inputMode="numeric" placeholder="Optional" className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-[var(--theme-accent)]" /></label>
         <label className="block"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Gender</span><select value={draft.gender} onChange={(event) => update("gender", event.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none">{GENDER_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></label>
         <label className="block"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Medication</span><select value={draft.onMedication} onChange={(event) => update("onMedication", event.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none">{YES_NO_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></label>
         <label className="block"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">ADHD</span><select value={draft.adhdStatus} onChange={(event) => update("adhdStatus", event.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none">{ADHD_STATUS_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></label>
-        <label className="block sm:col-span-2"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Hobbies</span><textarea value={draft.hobbies} onChange={(event) => update("hobbies", event.target.value)} rows={compact ? 2 : 3} placeholder="Things you enjoy doing..." className="w-full resize-none rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-[#3577DE]" /></label>
-        <label className="block sm:col-span-2"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Interests</span><textarea value={draft.interests} onChange={(event) => update("interests", event.target.value)} rows={compact ? 2 : 3} placeholder="Topics, routines, places, or motivations..." className="w-full resize-none rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-[#3577DE]" /></label>
+        <label className="block sm:col-span-2"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Hobbies</span><textarea value={draft.hobbies} onChange={(event) => update("hobbies", event.target.value)} rows={compact ? 2 : 3} placeholder="Things you enjoy doing..." className="w-full resize-none rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-[var(--theme-accent)]" /></label>
+        <label className="block sm:col-span-2"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Interests</span><textarea value={draft.interests} onChange={(event) => update("interests", event.target.value)} rows={compact ? 2 : 3} placeholder="Topics, routines, places, or motivations..." className="w-full resize-none rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-[var(--theme-accent)]" /></label>
       </div>
-      <button type="submit" className="mt-4 w-full rounded-xl bg-[#3577DE] py-3 text-sm font-semibold text-white">Save profile</button>
+      <button type="submit" className="mt-4 w-full rounded-xl bg-[var(--theme-accent)] py-3 text-sm font-semibold text-white">Save profile</button>
     </form>
   );
 }
@@ -808,7 +831,7 @@ function ProfileSetupPage({ profile, onSave, onSignOut }) {
   );
 }
 
-function ProfileSheet({ open, onClose, session, authLoading, syncStatus, notificationsEnabled, notificationSupported, profile, hiddenFeatures, enabledFeatures, onSaveProfile, onToggleFeature, onToggleEnabledFeature, onResetLayout, onEnableNotifications, onGoogleSignIn, onSignIn, onSignOut }) {
+function ProfileSheet({ open, onClose, session, authLoading, syncStatus, notificationsEnabled, notificationSupported, profile, hiddenFeatures, enabledFeatures, theme, onSaveProfile, onToggleFeature, onToggleEnabledFeature, onSetTheme, onResetLayout, onEnableNotifications, onGoogleSignIn, onSignIn, onSignOut }) {
   const [customiseOpen, setCustomiseOpen] = useState(false);
   const [submenu, setSubmenu] = useState("main");
   useEffect(() => {
@@ -850,28 +873,49 @@ function ProfileSheet({ open, onClose, session, authLoading, syncStatus, notific
               </button>
               {customiseOpen && (
                 <div className="mt-3 space-y-2">
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Colour theme</div>
+                    <div className="grid grid-cols-4 gap-2">
+                      {THEME_OPTIONS.map((option) => {
+                        const selected = theme === option.id;
+                        return (
+                          <button
+                            key={option.id}
+                            type="button"
+                            onClick={() => onSetTheme(option.id)}
+                            className={`flex flex-col items-center gap-1 rounded-xl bg-white p-2 text-[10px] font-semibold text-slate-500 ring-1 transition ${selected ? "ring-2 ring-[var(--theme-accent)] text-[#112849]" : "ring-slate-200 hover:ring-slate-300"}`}
+                          >
+                            <span className="grid h-7 w-7 place-items-center rounded-full" style={{ background: option.accent }}>
+                              {selected && <Check size={14} className="text-white" strokeWidth={3} />}
+                            </span>
+                            {option.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                   {FEATURE_OPTIONS.map((feature) => {
                     const hidden = hiddenFeatures.includes(feature.id);
                     return (
                       <button key={feature.id} onClick={() => onToggleFeature(feature.id)} className={`flex w-full items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-700 ${feature.sub ? "ml-4 w-[calc(100%-1rem)]" : ""}`}>
                         <span>{feature.label}</span>
-                        <span className={`grid h-5 w-5 place-items-center rounded-md border ${hidden ? "border-slate-300 text-transparent" : "border-[#3577DE] bg-[#3577DE] text-white"}`}><Check size={13} strokeWidth={3} /></span>
+                        <span className={`grid h-5 w-5 place-items-center rounded-md border ${hidden ? "border-slate-300 text-transparent" : "border-[var(--theme-accent)] bg-[var(--theme-accent)] text-white"}`}><Check size={13} strokeWidth={3} /></span>
                       </button>
                     );
                   })}
                   {BETA_FEATURE_OPTIONS.map((feature) => {
                     const enabled = enabledFeatures.includes(feature.id);
                     return (
-                      <button key={feature.id} onClick={() => onToggleEnabledFeature(feature.id)} className="flex w-full items-center justify-between rounded-xl bg-blue-50 px-3 py-2 text-sm text-[#112849] ring-1 ring-blue-100">
+                      <button key={feature.id} onClick={() => onToggleEnabledFeature(feature.id)} className="flex w-full items-center justify-between rounded-xl bg-[var(--theme-soft)] px-3 py-2 text-sm text-[#112849] ring-1 ring-[var(--theme-ring)]">
                         <span className="flex items-center gap-2">
                           {feature.label}
-                          <span className="rounded-full bg-[#3577DE] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">Beta</span>
+                          <span className="rounded-full bg-[var(--theme-accent)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">Beta</span>
                         </span>
-                        <span className={`grid h-5 w-5 place-items-center rounded-md border ${enabled ? "border-[#3577DE] bg-[#3577DE] text-white" : "border-slate-300 bg-white text-transparent"}`}><Check size={13} strokeWidth={3} /></span>
+                        <span className={`grid h-5 w-5 place-items-center rounded-md border ${enabled ? "border-[var(--theme-accent)] bg-[var(--theme-accent)] text-white" : "border-slate-300 bg-white text-transparent"}`}><Check size={13} strokeWidth={3} /></span>
                       </button>
                     );
                   })}
-                  <button onClick={onResetLayout} className="flex w-full items-center justify-between rounded-xl bg-blue-50 px-3 py-2 text-sm font-semibold text-[#3577DE] ring-1 ring-blue-100">
+                  <button onClick={onResetLayout} className="flex w-full items-center justify-between rounded-xl bg-[var(--theme-soft)] px-3 py-2 text-sm font-semibold text-[var(--theme-accent)] ring-1 ring-[var(--theme-ring)]">
                     <span>Reset screen layout</span>
                     <Settings2 size={15} />
                   </button>
@@ -880,7 +924,7 @@ function ProfileSheet({ open, onClose, session, authLoading, syncStatus, notific
             </div>
             <div className="mt-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200/70">
               <div className="flex items-start gap-3">
-                <Bell size={18} className="mt-0.5 text-[#3577DE]" />
+                <Bell size={18} className="mt-0.5 text-[var(--theme-accent)]" />
                 <div className="flex-1">
                   <div className="text-sm font-bold text-[#112849]">Browser notifications</div>
                   <p className="mt-1 text-xs leading-5 text-slate-400">Get a once-a-day reminder for today’s open tasks while ADHDeeds is open.</p>
@@ -888,7 +932,7 @@ function ProfileSheet({ open, onClose, session, authLoading, syncStatus, notific
                     type="button"
                     onClick={onEnableNotifications}
                     disabled={!notificationSupported || notificationsEnabled}
-                    className="mt-3 rounded-xl bg-blue-50 px-3 py-2 text-xs font-semibold text-[#3577DE] ring-1 ring-blue-100 disabled:bg-slate-100 disabled:text-slate-400 disabled:ring-slate-200"
+                    className="mt-3 rounded-xl bg-blue-50 px-3 py-2 text-xs font-semibold text-[var(--theme-accent)] ring-1 ring-blue-100 disabled:bg-slate-100 disabled:text-slate-400 disabled:ring-slate-200"
                   >
                     {!notificationSupported ? "Not supported here" : notificationsEnabled ? "Notifications on" : "Enable notifications"}
                   </button>
@@ -968,7 +1012,7 @@ function DailyBars({ days, tasks }) {
           return (
             <div key={isoDate(day)} className="flex flex-1 flex-col items-center gap-1.5">
               <div className="relative w-full max-w-[24px] overflow-hidden rounded-t-md bg-slate-100 sm:max-w-[27px]" style={{ height: available }}>
-                <motion.div animate={{ height: `${pct}%` }} className="absolute bottom-0 w-full rounded-t-md bg-[#3577DE]" />
+                <motion.div animate={{ height: `${pct}%` }} className="absolute bottom-0 w-full rounded-t-md bg-[var(--theme-accent)]" />
               </div>
               <span className="text-[10px] font-semibold text-slate-400">{pretty(day, { weekday: "short" }).slice(0, 3)}</span>
             </div>
@@ -1079,12 +1123,12 @@ function TodayConsiderationsCard({ today, tasks, habits, profile, aiAccessToken 
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 text-sm font-bold text-[#112849]">
-            <Sparkles size={16} className="text-[#3577DE]" /> Today's Considerations
-            <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#3577DE] ring-1 ring-blue-100">Beta</span>
+            <Sparkles size={16} className="text-[var(--theme-accent)]" /> Today's Considerations
+            <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[var(--theme-accent)] ring-1 ring-blue-100">Beta</span>
           </div>
           <p className="mt-1 text-xs text-slate-400">Weather, task load, and rut prevention.</p>
         </div>
-        <button onClick={refresh} className="rounded-xl bg-blue-50 px-3 py-2 text-xs font-semibold text-[#3577DE] ring-1 ring-blue-100">Refresh</button>
+        <button onClick={refresh} className="rounded-xl bg-blue-50 px-3 py-2 text-xs font-semibold text-[var(--theme-accent)] ring-1 ring-blue-100">Refresh</button>
       </div>
       <div className="mt-3 space-y-2">
         {items.map((item, index) => (
@@ -1152,7 +1196,7 @@ function DailyPlanCard({ today, tasks, habits, aiAccessToken }) {
     <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200/70">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2 text-sm font-bold text-[#112849]"><Sparkles size={16} className="text-[#3577DE]" /> Daily plan</div>
+          <div className="flex items-center gap-2 text-sm font-bold text-[#112849]"><Sparkles size={16} className="text-[var(--theme-accent)]" /> Daily plan</div>
           <p className="mt-1 text-xs text-slate-400">A realistic order for today.</p>
         </div>
         <div className="flex rounded-xl bg-slate-100 p-1">
@@ -1162,7 +1206,7 @@ function DailyPlanCard({ today, tasks, habits, aiAccessToken }) {
         </div>
       </div>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-        <button onClick={improvePlan} className="rounded-xl bg-blue-50 px-3 py-2 text-xs font-semibold text-[#3577DE] ring-1 ring-blue-100 hover:bg-blue-100">Improve with AI</button>
+        <button onClick={improvePlan} className="rounded-xl bg-blue-50 px-3 py-2 text-xs font-semibold text-[var(--theme-accent)] ring-1 ring-blue-100 hover:bg-blue-100">Improve with AI</button>
         {aiStatus && <span className="text-xs font-semibold text-slate-400">{aiStatus}</span>}
       </div>
       <ol className="mt-4 space-y-2">
@@ -1190,7 +1234,7 @@ function DailyPlanCard({ today, tasks, habits, aiAccessToken }) {
             onDragEnd={() => setDragPlanIndex(null)}
             className={`flex cursor-grab gap-3 rounded-xl px-3 py-2 text-sm text-slate-700 active:cursor-grabbing ${dragPlanIndex === index ? "bg-blue-50 ring-1 ring-blue-100" : "bg-slate-50"}`}
           >
-            <span className="font-bold text-[#3577DE]">{index + 1}</span>
+            <span className="font-bold text-[var(--theme-accent)]">{index + 1}</span>
             <span>{item}</span>
           </li>
         ))}
@@ -1251,7 +1295,7 @@ function TodaySection({ id, children, onMove, onPreview, onClearPreview, onPoint
       onPointerMove={onPointerMove}
       onPointerUp={onPointerEnd}
       onPointerCancel={onPointerEnd}
-      className={`group rounded-2xl transition ${onPointerStart ? "cursor-grab touch-none active:cursor-grabbing" : "cursor-grab active:cursor-grabbing"} ${className} ${dragOver ? "outline outline-2 outline-[#3577DE] outline-offset-4" : ""} ${draggingId === id ? "scale-[.985] opacity-70 outline outline-2 outline-dashed outline-[#3577DE] outline-offset-4" : ""}`}
+      className={`group rounded-2xl transition ${onPointerStart ? "cursor-grab touch-none active:cursor-grabbing" : "cursor-grab active:cursor-grabbing"} ${className} ${dragOver ? "outline outline-2 outline-[var(--theme-accent)] outline-offset-4" : ""} ${draggingId === id ? "scale-[.985] opacity-70 outline outline-2 outline-dashed outline-[var(--theme-accent)] outline-offset-4" : ""}`}
     >
       {children}
     </motion.div>
@@ -1298,7 +1342,7 @@ function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, 
               />
             )) : <p className="p-4 text-sm text-slate-400">Nothing planned today.</p>}
           </div>
-          <button onClick={() => onAddTask(selectedKey)} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-50 py-3 text-sm font-semibold text-[#3577DE] ring-1 ring-blue-100 hover:bg-blue-100">
+          <button onClick={() => onAddTask(selectedKey)} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-50 py-3 text-sm font-semibold text-[var(--theme-accent)] ring-1 ring-blue-100 hover:bg-blue-100">
             <Plus size={16} /> Add task
           </button>
         </div>
@@ -1319,7 +1363,7 @@ function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, 
               const checked = !!habit.ticks[selectedKey];
               return (
                 <button key={habit.id} onClick={() => onToggleHabit(habit.id, selectedKey)} className="flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left hover:bg-slate-50">
-                  <span className={`grid h-6 w-6 place-items-center rounded-lg border ${checked ? "border-[#3577DE] bg-[#3577DE] text-white" : "border-slate-300 text-transparent"}`}><Check size={15} strokeWidth={3} /></span>
+                  <span className={`grid h-6 w-6 place-items-center rounded-lg border ${checked ? "border-[var(--theme-accent)] bg-[var(--theme-accent)] text-white" : "border-slate-300 text-transparent"}`}><Check size={15} strokeWidth={3} /></span>
                   <div className="flex-1"><div className="text-sm font-medium text-slate-800">{habit.name}</div><div className="text-[11px] text-slate-400">{habit.detail}</div></div>
                   <span className="text-xs font-semibold text-slate-400">{habit.points} pts</span>
                 </button>
@@ -1433,9 +1477,9 @@ function DayCard({ day, tasks, onToggle, onToggleChecklistItem, onRemove, onEdit
         setDragOver(false);
         onDropTask(event.dataTransfer.getData("text/plain"), dayKey);
       }}
-      className={`min-w-[300px] overflow-hidden rounded-2xl bg-white shadow-sm ring-1 transition sm:min-w-[330px] lg:min-w-0 ${dragOver ? "ring-2 ring-[#3577DE]" : isToday ? "ring-2 ring-[#3577DE]" : "ring-slate-200/70"}`}
+      className={`min-w-[300px] overflow-hidden rounded-2xl bg-white shadow-sm ring-1 transition sm:min-w-[330px] lg:min-w-0 ${dragOver ? "ring-2 ring-[var(--theme-accent)]" : isToday ? "ring-2 ring-[var(--theme-accent)]" : "ring-slate-200/70"}`}
     >
-      <div className={`${isToday ? "bg-[#3577DE]" : "bg-[#112849]"} flex justify-between px-4 py-3.5 text-white`}>
+      <div className={`${isToday ? "bg-[var(--theme-accent)]" : "bg-[#112849]"} flex justify-between px-4 py-3.5 text-white`}>
         <div>
           <div className="text-[13px] font-bold uppercase tracking-wide">{pretty(day, { weekday: "long" })}</div>
           <div className="mt-1 text-xs text-blue-100/75">{pretty(day)}{isToday ? " · Today" : ""}</div>
@@ -1461,7 +1505,7 @@ function DayCard({ day, tasks, onToggle, onToggleChecklistItem, onRemove, onEdit
             />
           )) : <div className="pt-8 text-center text-xs text-slate-400">Drop tasks here</div>}
         </div>
-        <button onClick={() => onAddTask(dayKey)} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-50 py-2.5 text-xs font-semibold text-[#3577DE] ring-1 ring-blue-100 hover:bg-blue-100">
+        <button onClick={() => onAddTask(dayKey)} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-50 py-2.5 text-xs font-semibold text-[var(--theme-accent)] ring-1 ring-blue-100 hover:bg-blue-100">
           <Plus size={15} /> Add task
         </button>
       </div>
@@ -1561,7 +1605,7 @@ function WeekView({ days, tasks, weekSectionOrder, weekSectionWidths, hiddenFeat
                 <button key={dayKey} onClick={() => setSelectedDay(dayKey)} className={`rounded-xl px-1 py-2 text-center ring-1 transition ${isSelected ? "bg-[#112849] text-white ring-[#112849]" : "bg-white text-slate-500 ring-slate-200"}`}>
                   <div className="text-[10px] font-bold uppercase">{pretty(day, { weekday: "short" }).slice(0, 1)}</div>
                   <div className="mt-1 text-sm font-bold">{pretty(day, { day: "numeric" })}</div>
-                  <div className={`mx-auto mt-1 h-1.5 w-1.5 rounded-full ${dayTasks.length ? isSelected ? "bg-white" : "bg-[#3577DE]" : isToday ? "bg-amber-400" : "bg-transparent"}`} />
+                  <div className={`mx-auto mt-1 h-1.5 w-1.5 rounded-full ${dayTasks.length ? isSelected ? "bg-white" : "bg-[var(--theme-accent)]" : isToday ? "bg-amber-400" : "bg-transparent"}`} />
                 </button>
               );
             })}
@@ -1591,7 +1635,7 @@ function WeekView({ days, tasks, weekSectionOrder, weekSectionWidths, hiddenFeat
                 />
               )) : <div className="p-5 text-center text-sm text-slate-400">No tasks planned.</div>}
             </div>
-            <button onClick={() => onAddTask(selectedDay)} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-50 py-3 text-sm font-semibold text-[#3577DE] ring-1 ring-blue-100 hover:bg-blue-100">
+            <button onClick={() => onAddTask(selectedDay)} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-50 py-3 text-sm font-semibold text-[var(--theme-accent)] ring-1 ring-blue-100 hover:bg-blue-100">
               <Plus size={16} /> Add task
             </button>
           </div>
@@ -1685,7 +1729,7 @@ function HabitsView({ days, habits, onToggle, onAdd, onEdit, onRemove }) {
           <h2 className="text-2xl font-bold tracking-tight text-[#112849]">Habits</h2>
           <p className="mt-1 text-sm text-slate-500">Small things worth keeping visible.</p>
         </div>
-        <button onClick={onAdd} className="flex items-center gap-1 rounded-xl bg-[#3577DE] px-3 py-2 text-sm font-semibold text-white"><Plus size={16}/> Add</button>
+        <button onClick={onAdd} className="flex items-center gap-1 rounded-xl bg-[var(--theme-accent)] px-3 py-2 text-sm font-semibold text-white"><Plus size={16}/> Add</button>
       </div>
       {habits.map((habit) => {
         const completed = days.filter((day) => habit.ticks[isoDate(day)]).length;
@@ -1702,7 +1746,7 @@ function HabitsView({ days, habits, onToggle, onAdd, onEdit, onRemove }) {
               <div className="flex items-start gap-2">
                 <div className="text-right"><div className="text-lg font-bold text-[#112849]">{completed} / {target}</div><div className="text-[11px] text-slate-400">this week</div></div>
                 <div className="flex rounded-xl bg-slate-50 p-1">
-                  <button onClick={() => onEdit(habit)} className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:bg-white hover:text-[#3577DE]" aria-label="Edit habit" title="Edit habit"><Pencil size={15} /></button>
+                  <button onClick={() => onEdit(habit)} className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:bg-white hover:text-[var(--theme-accent)]" aria-label="Edit habit" title="Edit habit"><Pencil size={15} /></button>
                   <button onClick={() => onRemove(habit.id)} className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:bg-white hover:text-rose-500" aria-label="Delete habit" title="Delete habit"><Trash2 size={15} /></button>
                 </div>
               </div>
@@ -1713,12 +1757,12 @@ function HabitsView({ days, habits, onToggle, onAdd, onEdit, onRemove }) {
                 return (
                   <button key={isoDate(day)} onClick={() => onToggle(habit.id, isoDate(day))} className="flex flex-1 flex-col items-center gap-2">
                     <span className="text-[10px] font-semibold uppercase text-slate-400">{pretty(day, { weekday: "short" }).slice(0, 3)}</span>
-                    <span className={`grid h-9 w-9 place-items-center rounded-xl border transition ${on ? "border-[#3577DE] bg-[#3577DE] text-white" : "border-slate-200 bg-slate-50 text-transparent"}`}><Check size={18} strokeWidth={3} /></span>
+                    <span className={`grid h-9 w-9 place-items-center rounded-xl border transition ${on ? "border-[var(--theme-accent)] bg-[var(--theme-accent)] text-white" : "border-slate-200 bg-slate-50 text-transparent"}`}><Check size={18} strokeWidth={3} /></span>
                   </button>
                 );
               })}
             </div>
-            <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-slate-100"><motion.div animate={{ width: `${pct}%` }} className="h-full rounded-full bg-[#3577DE]" /></div>
+            <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-slate-100"><motion.div animate={{ width: `${pct}%` }} className="h-full rounded-full bg-[var(--theme-accent)]" /></div>
           </div>
         );
       })}
@@ -1752,10 +1796,10 @@ function BrainDumpsterView({ items, categories, onAddItems, onRemoveItem, onConv
             onChange={(event) => setText(event.target.value)}
             placeholder="One thought per line..."
             rows={5}
-            className="w-full resize-none rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#3577DE]"
+            className="w-full resize-none rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[var(--theme-accent)]"
           />
         </label>
-        <button type="submit" className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-[#3577DE] py-3 text-sm font-semibold text-white">
+        <button type="submit" className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--theme-accent)] py-3 text-sm font-semibold text-white">
           <Plus size={16} /> Add to dumpster
         </button>
       </form>
@@ -1770,7 +1814,7 @@ function BrainDumpsterView({ items, categories, onAddItems, onRemoveItem, onConv
               <button
                 onClick={() => onConvertItem(item)}
                 disabled={!categories.length}
-                className="rounded-lg bg-blue-50 px-3 py-2 text-xs font-semibold text-[#3577DE] ring-1 ring-blue-100 disabled:bg-slate-100 disabled:text-slate-400 disabled:ring-slate-200"
+                className="rounded-lg bg-blue-50 px-3 py-2 text-xs font-semibold text-[var(--theme-accent)] ring-1 ring-blue-100 disabled:bg-slate-100 disabled:text-slate-400 disabled:ring-slate-200"
               >
                 Make task
               </button>
@@ -1785,7 +1829,7 @@ function BrainDumpsterView({ items, categories, onAddItems, onRemoveItem, onConv
       {!categories.length && (
         <div className="rounded-2xl bg-blue-50 p-4 text-sm text-[#112849] ring-1 ring-blue-100">
           Create a category before turning dumped items into tasks.
-          <button onClick={onAddCategory} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-white py-3 text-sm font-semibold text-[#3577DE] ring-1 ring-blue-100">
+          <button onClick={onAddCategory} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-white py-3 text-sm font-semibold text-[var(--theme-accent)] ring-1 ring-blue-100">
             <Plus size={16} /> Add Category
           </button>
         </div>
@@ -1806,7 +1850,7 @@ function AllTasksView({ tasks, categories, onAddCategory, onReorderCategory, onT
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4 pb-24">
       <div className="flex items-end justify-between">
         <div><h2 className="text-2xl font-bold tracking-tight text-[#112849]">Tasks</h2><p className="mt-1 text-sm text-slate-500">Everything on your board.</p></div>
-        <button onClick={onAdd} className="hidden items-center gap-1 rounded-xl bg-[#3577DE] px-3 py-2 text-sm font-semibold text-white sm:flex"><Plus size={16}/> Add</button>
+        <button onClick={onAdd} className="hidden items-center gap-1 rounded-xl bg-[var(--theme-accent)] px-3 py-2 text-sm font-semibold text-white sm:flex"><Plus size={16}/> Add</button>
       </div>
       <div className="flex items-center gap-2 overflow-x-auto px-px pb-1 pt-1">
         <span className="shrink-0 text-xs font-semibold uppercase tracking-[.12em] text-slate-400">Categories</span>
@@ -1832,20 +1876,20 @@ function AllTasksView({ tasks, categories, onAddCategory, onReorderCategory, onT
             }}
             onDragEnd={() => setCategoryDragOver("")}
             onClick={() => setFilter(cat)}
-            className={`cursor-grab whitespace-nowrap rounded-full px-4 py-2 text-xs font-semibold transition active:cursor-grabbing ${filter === cat ? "bg-[#112849] text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"} ${categoryDragOver === cat ? "outline outline-2 outline-[#3577DE] outline-offset-2" : ""}`}
+            className={`cursor-grab whitespace-nowrap rounded-full px-4 py-2 text-xs font-semibold transition active:cursor-grabbing ${filter === cat ? "bg-[#112849] text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"} ${categoryDragOver === cat ? "outline outline-2 outline-[var(--theme-accent)] outline-offset-2" : ""}`}
             title="Drag to reorder"
           >
             {cat}
           </button>
         ))}
-        <button onClick={onAddCategory} className="flex shrink-0 items-center gap-1 rounded-full bg-blue-50 px-4 py-2 text-xs font-semibold text-[#3577DE] ring-1 ring-blue-100"><Plus size={14} /> Add Category</button>
+        <button onClick={onAddCategory} className="flex shrink-0 items-center gap-1 rounded-full bg-blue-50 px-4 py-2 text-xs font-semibold text-[var(--theme-accent)] ring-1 ring-blue-100"><Plus size={14} /> Add Category</button>
       </div>
       <div className="flex items-center justify-between rounded-2xl bg-white px-4 py-3 shadow-sm ring-1 ring-slate-200/70">
         <div>
           <div className="text-sm font-bold text-[#112849]">Recurring tasks</div>
           <div className="text-xs text-slate-400">{showRecurring ? "Showing repeated tasks" : "Hidden from this view"}</div>
         </div>
-        <button onClick={() => setShowRecurring((value) => !value)} className={`relative h-7 w-12 rounded-full transition ${showRecurring ? "bg-[#3577DE]" : "bg-slate-200"}`} aria-label={showRecurring ? "Hide recurring tasks" : "Show recurring tasks"}>
+        <button onClick={() => setShowRecurring((value) => !value)} className={`relative h-7 w-12 rounded-full transition ${showRecurring ? "bg-[var(--theme-accent)]" : "bg-slate-200"}`} aria-label={showRecurring ? "Hide recurring tasks" : "Show recurring tasks"}>
           <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition ${showRecurring ? "left-6" : "left-1"}`} />
         </button>
       </div>
@@ -1960,12 +2004,12 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
             <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-slate-200 sm:hidden" />
             <div className="mb-5 flex items-center justify-between"><h2 className="text-xl font-bold tracking-tight text-[#112849]">{task ? "Edit task" : "Add a task"}</h2><button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-slate-100 text-slate-500"><X size={18}/></button></div>
             <div className="space-y-4">
-              <label className="block"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Task</span><input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="What needs doing?" className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#3577DE]" /></label>
+              <label className="block"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Task</span><input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="What needs doing?" className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[var(--theme-accent)]" /></label>
               <button type="button" onClick={createBreakdown} className="flex w-full items-center justify-center gap-2 rounded-xl border border-blue-100 bg-blue-50 py-3 text-sm font-semibold text-[#112849]"><Sparkles size={16} /> Break into smaller tasks</button>
               <div className="rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-200/70">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <div className="flex items-center gap-2 text-sm font-bold text-[#112849]"><ListChecks size={16} className="text-[#3577DE]" /> Checklist</div>
+                    <div className="flex items-center gap-2 text-sm font-bold text-[#112849]"><ListChecks size={16} className="text-[var(--theme-accent)]" /> Checklist</div>
                     <p className="mt-1 text-xs text-slate-400">The task completes when every item is checked.</p>
                   </div>
                   <button
@@ -1974,7 +2018,7 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
                       setChecklistOpen((open) => checklist.length ? !open : true);
                       if (!checklist.length) addChecklistItem();
                     }}
-                    className="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-[#3577DE] ring-1 ring-blue-100"
+                    className="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-[var(--theme-accent)] ring-1 ring-blue-100"
                   >
                     {checklist.length ? checklistOpen ? "Hide List" : "Open List" : "Create List"}
                   </button>
@@ -1983,16 +2027,16 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
                   <div className="mt-3 space-y-2">
                     {checklist.map((item) => (
                       <div key={item.id} className="flex items-center gap-2 rounded-xl bg-white p-2 ring-1 ring-slate-200">
-                        <button type="button" onClick={() => updateChecklistItem(item.id, { done: !item.done })} className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg border ${item.done ? "border-[#3577DE] bg-[#3577DE] text-white" : "border-slate-300 text-transparent"}`} aria-label={item.done ? "Mark checklist item incomplete" : "Complete checklist item"}>
+                        <button type="button" onClick={() => updateChecklistItem(item.id, { done: !item.done })} className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg border ${item.done ? "border-[var(--theme-accent)] bg-[var(--theme-accent)] text-white" : "border-slate-300 text-transparent"}`} aria-label={item.done ? "Mark checklist item incomplete" : "Complete checklist item"}>
                           <Check size={15} strokeWidth={3} />
                         </button>
-                        <input value={item.text} onChange={(event) => updateChecklistItem(item.id, { text: event.target.value })} placeholder="Checklist item" className="min-w-0 flex-1 rounded-lg border border-transparent px-2 py-1.5 text-sm outline-none focus:border-[#3577DE]" />
+                        <input value={item.text} onChange={(event) => updateChecklistItem(item.id, { text: event.target.value })} placeholder="Checklist item" className="min-w-0 flex-1 rounded-lg border border-transparent px-2 py-1.5 text-sm outline-none focus:border-[var(--theme-accent)]" />
                         <button type="button" onClick={() => removeChecklistItem(item.id)} className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-500" aria-label="Remove checklist item"><X size={15} /></button>
                       </div>
                     ))}
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <button type="button" onClick={() => addChecklistItem()} className="rounded-xl bg-white py-2.5 text-sm font-semibold text-slate-600 ring-1 ring-slate-200">Add item</button>
-                      <button type="button" onClick={suggestChecklist} disabled={!name.trim()} className="flex items-center justify-center gap-2 rounded-xl bg-blue-50 py-2.5 text-sm font-semibold text-[#3577DE] ring-1 ring-blue-100 disabled:bg-slate-100 disabled:text-slate-400 disabled:ring-slate-200"><Sparkles size={15} /> Suggest list with AI</button>
+                      <button type="button" onClick={suggestChecklist} disabled={!name.trim()} className="flex items-center justify-center gap-2 rounded-xl bg-blue-50 py-2.5 text-sm font-semibold text-[var(--theme-accent)] ring-1 ring-blue-100 disabled:bg-slate-100 disabled:text-slate-400 disabled:ring-slate-200"><Sparkles size={15} /> Suggest list with AI</button>
                     </div>
                     {checklistStatus && <p className="text-xs font-medium text-slate-400">{checklistStatus}</p>}
                   </div>
@@ -2008,17 +2052,17 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
                 </div>
               )}
               <div className="grid grid-cols-2 gap-3">
-                <label><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Category</span><select value={category} onChange={(e) => setCategory(e.target.value)} disabled={!categories.length} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none disabled:bg-slate-50 disabled:text-slate-400">{categories.length ? categories.map((item) => <option key={item}>{item}</option>) : <option>Create a category first</option>}</select><button type="button" onClick={onAddCategory} className="mt-2 rounded-lg bg-blue-50 px-2.5 py-1.5 text-[11px] font-semibold text-[#3577DE] ring-1 ring-blue-100">Add Category</button></label>
+                <label><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Category</span><select value={category} onChange={(e) => setCategory(e.target.value)} disabled={!categories.length} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none disabled:bg-slate-50 disabled:text-slate-400">{categories.length ? categories.map((item) => <option key={item}>{item}</option>) : <option>Create a category first</option>}</select><button type="button" onClick={onAddCategory} className="mt-2 rounded-lg bg-blue-50 px-2.5 py-1.5 text-[11px] font-semibold text-[var(--theme-accent)] ring-1 ring-blue-100">Add Category</button></label>
                 <label><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Day</span><select value={date} onChange={(e) => setDate(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none">{!days.some((day) => isoDate(day) === date) && <option value={date}>{new Date(`${date}T00:00:00`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}</option>}{days.map((day) => <option key={isoDate(day)} value={isoDate(day)}>{pretty(day, { weekday: "short", day: "numeric", month: "short" })}</option>)}</select><button type="button" onClick={() => setDatePickerOpen((open) => !open)} className="mt-2 rounded-lg bg-slate-50 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200">Not This Week?</button></label>
               </div>
               {datePickerOpen && (
                 <label className="block rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-200/70">
                   <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Choose another date</span>
-                  <input type="date" value={date} onChange={(event) => setDate(event.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-[#3577DE]" />
+                  <input type="date" value={date} onChange={(event) => setDate(event.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-[var(--theme-accent)]" />
                 </label>
               )}
-              <label className="block"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Notes</span><textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="Useful context, booking reference, what to ask..." className="w-full resize-none rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#3577DE]" /></label>
-              <label className="block"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Website</span><input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="example.com" className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#3577DE]" /></label>
+              <label className="block"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Notes</span><textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="Useful context, booking reference, what to ask..." className="w-full resize-none rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[var(--theme-accent)]" /></label>
+              <label className="block"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Website</span><input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="example.com" className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[var(--theme-accent)]" /></label>
               {!task && (
                 <label className="block">
                   <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Repeat</span>
@@ -2027,9 +2071,9 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
                   </select>
                 </label>
               )}
-              <div className="grid grid-cols-3 gap-2">{POINT_OPTIONS.map((option) => <button type="button" key={option.value} onClick={() => setPoints(option.value)} className={`rounded-xl border px-2 py-3 text-center ${points === option.value ? "border-[#3577DE] bg-blue-50 text-[#112849]" : "border-slate-200 text-slate-500"}`}><span className="block text-xs font-semibold">{option.label}</span><span className="mt-1 block text-[11px]">{option.value} pts</span></button>)}</div>
-              <button type="button" onClick={() => setImportant(!important)} className="flex w-full items-center gap-3 rounded-xl bg-slate-50 p-3 text-left"><span className={`grid h-5 w-5 place-items-center rounded-md border ${important ? "border-[#3577DE] bg-[#3577DE] text-white" : "border-slate-300 text-transparent"}`}><Check size={13} /></span><span className="text-sm text-slate-700">Mark as important</span></button>
-              <button type="submit" disabled={!category} className="w-full rounded-xl bg-[#3577DE] py-3.5 text-sm font-semibold text-white disabled:bg-slate-300">{task ? "Save changes" : "Add task"}</button>
+              <div className="grid grid-cols-3 gap-2">{POINT_OPTIONS.map((option) => <button type="button" key={option.value} onClick={() => setPoints(option.value)} className={`rounded-xl border px-2 py-3 text-center ${points === option.value ? "border-[var(--theme-accent)] bg-blue-50 text-[#112849]" : "border-slate-200 text-slate-500"}`}><span className="block text-xs font-semibold">{option.label}</span><span className="mt-1 block text-[11px]">{option.value} pts</span></button>)}</div>
+              <button type="button" onClick={() => setImportant(!important)} className="flex w-full items-center gap-3 rounded-xl bg-slate-50 p-3 text-left"><span className={`grid h-5 w-5 place-items-center rounded-md border ${important ? "border-[var(--theme-accent)] bg-[var(--theme-accent)] text-white" : "border-slate-300 text-transparent"}`}><Check size={13} /></span><span className="text-sm text-slate-700">Mark as important</span></button>
+              <button type="submit" disabled={!category} className="w-full rounded-xl bg-[var(--theme-accent)] py-3.5 text-sm font-semibold text-white disabled:bg-slate-300">{task ? "Save changes" : "Add task"}</button>
             </div>
           </motion.form>
         </>
@@ -2080,8 +2124,8 @@ function HabitSheet({ open, onClose, onSave, onUpdate, habit }) {
             <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-slate-200 sm:hidden" />
             <div className="mb-5 flex items-center justify-between"><h2 className="text-xl font-bold tracking-tight text-[#112849]">{habit ? "Edit habit" : "Add a habit"}</h2><button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-slate-100 text-slate-500"><X size={18}/></button></div>
             <div className="space-y-4">
-              <label className="block"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Habit</span><input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="What do you want to keep visible?" className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#3577DE]" /></label>
-              <label className="block"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Detail</span><input value={detail} onChange={(e) => setDetail(e.target.value)} placeholder="Daily goal, weekly target, or a note" className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#3577DE]" /></label>
+              <label className="block"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Habit</span><input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="What do you want to keep visible?" className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[var(--theme-accent)]" /></label>
+              <label className="block"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Detail</span><input value={detail} onChange={(e) => setDetail(e.target.value)} placeholder="Daily goal, weekly target, or a note" className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[var(--theme-accent)]" /></label>
               <label className="block">
                 <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Narrative</span>
                 <textarea
@@ -2089,14 +2133,14 @@ function HabitSheet({ open, onClose, onSave, onUpdate, habit }) {
                   onChange={(e) => setNarrative(e.target.value)}
                   placeholder="Why does this habit matter?"
                   rows={3}
-                  className="w-full resize-none rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#3577DE]"
+                  className="w-full resize-none rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[var(--theme-accent)]"
                 />
               </label>
               <div className="grid grid-cols-2 gap-3">
                 <label><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Mode</span><select value={mode} onChange={(e) => setMode(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none">{HABIT_MODES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
                 <label><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Points</span><select value={points} onChange={(e) => setPoints(Number(e.target.value))} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none">{HABIT_POINT_OPTIONS.map((item) => <option key={item} value={item}>{item} pts</option>)}</select></label>
               </div>
-              <button type="submit" className="w-full rounded-xl bg-[#3577DE] py-3.5 text-sm font-semibold text-white">{habit ? "Save changes" : "Add habit"}</button>
+              <button type="submit" className="w-full rounded-xl bg-[var(--theme-accent)] py-3.5 text-sm font-semibold text-white">{habit ? "Save changes" : "Add habit"}</button>
             </div>
           </motion.form>
         </>
@@ -2127,8 +2171,8 @@ function CategorySheet({ open, onClose, onSave }) {
           <motion.form onSubmit={submit} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-x-0 bottom-0 z-50 rounded-t-[28px] bg-white px-5 pb-[max(1.4rem,env(safe-area-inset-bottom))] pt-4 shadow-2xl sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-[420px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-3xl sm:p-6">
             <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-slate-200 sm:hidden" />
             <div className="mb-5 flex items-center justify-between"><h2 className="text-xl font-bold tracking-tight text-[#112849]">Add Category</h2><button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-slate-100 text-slate-500"><X size={18}/></button></div>
-            <label className="block"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Category name</span><input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Work, Health, Admin" className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#3577DE]" /></label>
-            <button type="submit" className="mt-4 w-full rounded-xl bg-[#3577DE] py-3.5 text-sm font-semibold text-white">Add Category</button>
+            <label className="block"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Category name</span><input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Work, Health, Admin" className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[var(--theme-accent)]" /></label>
+            <button type="submit" className="mt-4 w-full rounded-xl bg-[var(--theme-accent)] py-3.5 text-sm font-semibold text-white">Add Category</button>
           </motion.form>
         </>
       )}
@@ -2144,13 +2188,13 @@ function AISheet({ insight, onClose, onAddFirstStep }) {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="fixed inset-0 z-40 bg-slate-950/40" />
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-x-0 bottom-0 z-50 rounded-t-[28px] bg-white px-5 pb-[max(1.4rem,env(safe-area-inset-bottom))] pt-4 shadow-2xl sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-[470px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-3xl sm:p-6">
             <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-slate-200 sm:hidden" />
-            <div className="mb-5 flex items-center justify-between"><h2 className="flex items-center gap-2 text-xl font-bold tracking-tight text-[#112849]"><Sparkles size={20} className="text-[#3577DE]" /> {insight.title}</h2><button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-slate-100 text-slate-500"><X size={18}/></button></div>
+            <div className="mb-5 flex items-center justify-between"><h2 className="flex items-center gap-2 text-xl font-bold tracking-tight text-[#112849]"><Sparkles size={20} className="text-[var(--theme-accent)]" /> {insight.title}</h2><button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-slate-100 text-slate-500"><X size={18}/></button></div>
             <p className="text-sm leading-6 text-slate-600">{insight.note}</p>
             {insight.firstStep && (
               <div className="mt-4 rounded-2xl bg-blue-50 p-4">
                 <div className="text-xs font-semibold uppercase tracking-wide text-blue-500">First step</div>
                 <div className="mt-2 text-sm font-semibold text-[#112849]">{insight.firstStep}</div>
-                <button onClick={onAddFirstStep} className="mt-4 w-full rounded-xl bg-[#3577DE] py-3 text-sm font-semibold text-white">Add first step as task</button>
+                <button onClick={onAddFirstStep} className="mt-4 w-full rounded-xl bg-[var(--theme-accent)] py-3 text-sm font-semibold text-white">Add first step as task</button>
               </div>
             )}
           </motion.div>
@@ -2184,7 +2228,7 @@ function BottomNav({ view, setView }) {
   return (
     <nav className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+16px)] z-20 mx-auto flex max-w-[390px] items-center justify-between rounded-3xl border border-white/70 bg-white/75 px-4 py-2.5 shadow-[0_18px_45px_rgba(17,40,73,0.20)] ring-1 ring-slate-200/70 backdrop-blur-2xl sm:hidden">
       {tabs.map(({ id, label, icon: Icon }) => (
-        <button key={id} onClick={() => setView(id)} className={`flex min-h-11 min-w-[52px] flex-col items-center justify-center gap-1 rounded-2xl text-[10px] font-semibold transition ${view === id ? "bg-white/80 text-[#3577DE] shadow-sm ring-1 ring-slate-200/70" : "text-slate-400 hover:bg-white/50"}`}><Icon size={21}/><span>{label}</span></button>
+        <button key={id} onClick={() => setView(id)} className={`flex min-h-11 min-w-[52px] flex-col items-center justify-center gap-1 rounded-2xl text-[10px] font-semibold transition ${view === id ? "bg-white/80 text-[var(--theme-accent)] shadow-sm ring-1 ring-slate-200/70" : "text-slate-400 hover:bg-white/50"}`}><Icon size={21}/><span>{label}</span></button>
       ))}
     </nav>
   );
@@ -2328,6 +2372,7 @@ export default function ADHDeedsApp() {
   const weekSectionWidths = data.ui?.weekWidths || {};
   const hiddenFeatures = data.ui?.hiddenFeatures || [];
   const enabledFeatures = data.ui?.enabledFeatures || [];
+  const selectedTheme = THEME_OPTIONS.some((option) => option.id === data.ui?.theme) ? data.ui.theme : DEFAULT_THEME_ID;
   const profile = normalizeProfile(data.profile);
   const categories = data.categories || [];
   const categoryNudges = categories.map((category) => {
@@ -2580,6 +2625,10 @@ export default function ADHDeedsApp() {
       return { ...old, ui: { ...(old.ui || {}), enabledFeatures } };
     });
   }
+  function setTheme(themeId) {
+    if (!THEME_OPTIONS.some((option) => option.id === themeId)) return;
+    setData((old) => ({ ...old, ui: { ...(old.ui || {}), theme: themeId } }));
+  }
   async function openReframeTask(task) {
     const fallback = {
       task,
@@ -2680,12 +2729,12 @@ export default function ADHDeedsApp() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F3F6FB] font-sans text-slate-900">
+    <div className="min-h-screen bg-[#F3F6FB] font-sans text-slate-900" style={themeStyle(selectedTheme)}>
       <Header activeWeek={activeWeek} setActiveWeek={setActiveWeek} onProfile={() => setProfileOpen(true)} points={points} />
       <main className={`mx-auto px-4 py-5 sm:px-8 sm:py-7 ${view === "week" ? "max-w-none 2xl:max-w-[1800px]" : "max-w-7xl"}`}>
         <div className="hidden gap-2 pb-6 sm:flex">
           {[{id:"today",label:"Today"},{id:"week",label:"Week"},{id:"dumpster",label:"Brain Dumpster"},{id:"tasks",label:"All tasks"},{id:"habits",label:"Habits"}].map((tab) => (
-            <button key={tab.id} onClick={() => setView(tab.id)} className={`rounded-full px-5 py-2.5 text-sm font-semibold ${view === tab.id ? "bg-[#112849] text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>{tab.label}</button>
+            <button key={tab.id} onClick={() => setView(tab.id)} className={`rounded-full px-5 py-2.5 text-sm font-semibold ${view === tab.id ? "bg-[var(--theme-header)] text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>{tab.label}</button>
           ))}
         </div>
         {view === "today" && <TodayView today={today} selectedDate={selectedTodayDate} tasks={weekTasks} habits={data.habits} brainDump={data.brainDump || []} categories={categories} profile={profile} hiddenFeatures={hiddenFeatures} enabledFeatures={enabledFeatures} aiAccessToken={session?.access_token} todaySectionOrder={todaySectionOrder} todaySectionWidths={todaySectionWidths} onPreviousDay={() => moveTodayDate(-1)} onNextDay={() => moveTodayDate(1)} onJumpToday={() => setTodayDate(new Date())} onReorderSection={reorderTodaySection} onToggleTask={toggleTask} onToggleChecklistItem={toggleChecklistItem} onToggleHabit={toggleHabit} onEditTask={openEditTask} onRemoveTask={removeTask} onAddTask={openAddTask} onAddBrainDumpItems={addBrainDumpItems} onRemoveBrainDumpItem={removeBrainDumpItem} onConvertBrainDumpItem={convertBrainDumpItem} onAddCategory={() => setCategorySheetOpen(true)} onReframeTask={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} nudges={categoryNudges} points={points} progress={todayProgress} />}
@@ -2698,7 +2747,7 @@ export default function ADHDeedsApp() {
       <AddTaskSheet open={sheetOpen} onClose={closeSheet} onSave={addTask} onUpdate={updateTask} days={days} task={editingTask} initialDate={newTaskDate} initialName={brainTaskDraft?.text || ""} categories={categories} profile={profile} onAddCategory={() => setCategorySheetOpen(true)} aiAccessToken={session?.access_token} />
       <HabitSheet open={habitSheetOpen} onClose={closeHabitSheet} onSave={addHabit} onUpdate={updateHabit} habit={editingHabit} />
       <CategorySheet open={categorySheetOpen} onClose={() => setCategorySheetOpen(false)} onSave={addCategory} />
-      <ProfileSheet open={profileOpen} onClose={() => setProfileOpen(false)} session={session} authLoading={authLoading} syncStatus={syncStatus} notificationsEnabled={notificationsEnabled} notificationSupported={notificationSupported} profile={profile} hiddenFeatures={hiddenFeatures} enabledFeatures={enabledFeatures} onSaveProfile={saveProfile} onToggleFeature={toggleFeature} onToggleEnabledFeature={toggleEnabledFeature} onResetLayout={resetScreenLayout} onEnableNotifications={enableNotifications} onGoogleSignIn={signInWithGoogle} onSignIn={signIn} onSignOut={signOut} />
+      <ProfileSheet open={profileOpen} onClose={() => setProfileOpen(false)} session={session} authLoading={authLoading} syncStatus={syncStatus} notificationsEnabled={notificationsEnabled} notificationSupported={notificationSupported} profile={profile} hiddenFeatures={hiddenFeatures} enabledFeatures={enabledFeatures} theme={selectedTheme} onSaveProfile={saveProfile} onToggleFeature={toggleFeature} onToggleEnabledFeature={toggleEnabledFeature} onSetTheme={setTheme} onResetLayout={resetScreenLayout} onEnableNotifications={enableNotifications} onGoogleSignIn={signInWithGoogle} onSignIn={signIn} onSignOut={signOut} />
       <AISheet insight={aiInsight} onClose={() => setAiInsight(null)} onAddFirstStep={addFirstStepTask} />
       <AIToast message={rescheduleAdvice} onClose={() => setRescheduleAdvice("")} />
     </div>
