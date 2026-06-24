@@ -30,7 +30,10 @@ Task: ${JSON.stringify(payload.task)}`;
     return `${shared}
 Return JSON shaped exactly like {"items":["..."],"opinion":"..."}.
 Make a daily plan from the visible tasks and habits. Energy mode is ${payload.energy}.
-Use at most ${payload.energy === "push" ? 5 : payload.energy === "low" ? 3 : 4} items.
+If energy mode is "push", include every visible open task and every visible open habit for the day. Do not cap the number of items.
+If energy mode is "low", use at most 3 items.
+If energy mode is "normal", use at most 4 items.
+Keep the order realistic and avoid inventing tasks that are not in the data.
 Data: ${JSON.stringify(payload)}`;
   }
 

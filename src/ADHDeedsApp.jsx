@@ -421,11 +421,12 @@ function reframeTask(task) {
 function buildDailyPlan(today, tasks, habits, energy) {
   const todayKey = isoDate(today);
   const openTasks = sortPriority(tasks.filter((task) => task.date === todayKey && !task.done));
-  const limit = energy === "low" ? 2 : energy === "push" ? 5 : 3;
+  const limit = energy === "low" ? 2 : energy === "push" ? openTasks.length : 3;
   const chosen = openTasks.slice(0, limit);
-  const habit = habits.find((item) => !item.ticks[todayKey]);
+  const openHabits = habits.filter((item) => !item.ticks[todayKey]);
   const plan = chosen.map((task) => `${task.name} (${task.points} pts)`);
-  if (habit) plan.push(`${habit.name} (${habit.points} pts)`);
+  if (energy === "push") openHabits.forEach((habit) => plan.push(`${habit.name} (${habit.points} pts)`));
+  else if (openHabits[0]) plan.push(`${openHabits[0].name} (${openHabits[0].points} pts)`);
   if (!plan.length) return ["Keep the day light: everything visible for today is already clear."];
   return plan;
 }
