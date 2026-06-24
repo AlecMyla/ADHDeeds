@@ -34,6 +34,19 @@ Use at most ${payload.energy === "push" ? 5 : payload.energy === "low" ? 3 : 4} 
 Data: ${JSON.stringify(payload)}`;
   }
 
+  if (type === "breakdown") {
+    return `${shared}
+Return JSON shaped exactly like {"items":["..."]}.
+Break the task into 3 to 6 concrete smaller tasks.
+Each item must be specific to the actual task, not a generic productivity step.
+Use verbs and useful nouns from the task/notes/category where possible.
+Prefer actions that can be completed in 2 to 15 minutes.
+Avoid vague filler such as "get started", "work on it", "finish it", "review the task", or "make progress".
+If the task involves contacting someone, include the specific prep/send/call steps.
+If the task involves booking, buying, submitting, packing, cleaning, admin, or travel, make the steps match that domain.
+Task and context: ${JSON.stringify({ task: payload.task, profile: payload.profile || {} })}`;
+  }
+
   if (type === "opinion") {
     return `${shared}
 Return JSON shaped exactly like {"title":"AI opinion","note":"...","firstStep":"..."}.
@@ -49,10 +62,12 @@ Create a practical checklist for this task.
 Use 5 to 12 short checklist items.
 Do not repeat existing items.
 Avoid generic filler like "do task" or "finish it".
-If profile.onMedication is "Yes" and the task appears to involve travel, overnight stays, leaving home for a long day, appointments, or routines, include a neutral medication reminder item such as "Medication".
-If profile.gender is "Female" and the task appears to involve travel, overnight stays, packing, work/school day prep, or leaving home for a long day, include a neutral menstrual-cycle products item.
-Do not ask what medication the user takes, do not give dosage or clinical advice, and do not infer pregnancy or health status.
-Task: ${JSON.stringify(payload.task)}`;
+Profile rules are hard constraints:
+- Only include a medication reminder if profile.onMedication is exactly "Yes" and the task plausibly involves travel, overnight stays, leaving home for a long day, appointments, or routines.
+- Only include menstrual-cycle products if profile.gender is exactly "Female" and the task plausibly involves travel, overnight stays, packing, or leaving home for a long day.
+- If profile.gender is "Male", "Non-binary", "Other", or "Prefer not to say", do not mention menstrual cycles, periods, tampons, pads, liners, or menstrual products.
+- Do not ask what medication the user takes, do not give dosage or clinical advice, and do not infer pregnancy or health status.
+Task and context: ${JSON.stringify({ task: payload.task, profile: payload.profile || {} })}`;
   }
 
   if (type === "today-considerations") {
@@ -124,6 +139,23 @@ function parseContent(data) {
   return JSON.parse(text);
 }
 
+function removeProfileMismatches(type, result, profile = {}) {
+  if (type !== "checklist" || !Array.isArray(result?.items)) return result;
+  const gender = profile.gender || "Prefer not to say";
+  const onMedication = profile.onMedication || "Prefer not to say";
+  const menstrualPattern = /\b(period|periods|menstrual|menstruation|tampon|tampons|pad|pads|liner|liners|sanitary|cycle products?)\b/i;
+  const medicationPattern = /\b(medication|medicine|meds|prescription|prescriptions|tablets|pills)\b/i;
+  return {
+    ...result,
+    items: result.items.filter((item) => {
+      const text = String(item || "");
+      if (gender !== "Female" && menstrualPattern.test(text)) return false;
+      if (onMedication !== "Yes" && medicationPattern.test(text)) return false;
+      return true;
+    }),
+  };
+}
+
 function requestBody(req) {
   if (!req.body) return {};
   if (typeof req.body === "string") return JSON.parse(req.body);
@@ -185,7 +217,8 @@ export default async function handler(req, res) {
       return json(res, response.status, { error: data?.error?.message || "AI request failed." });
     }
 
-    return json(res, 200, parseContent(data));
+    const parsed = parseContent(data);
+    return json(res, 200, removeProfileMismatches(type, parsed, payload.profile));
   } catch (error) {
     return json(res, 500, { error: error.message || "AI request failed." });
   }

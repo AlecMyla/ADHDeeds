@@ -1961,6 +1961,7 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
   const [website, setWebsite] = useState("");
   const [recurrence, setRecurrence] = useState("none");
   const [breakdown, setBreakdown] = useState([]);
+  const [breakdownStatus, setBreakdownStatus] = useState("");
   const [checklistOpen, setChecklistOpen] = useState(false);
   const [checklist, setChecklist] = useState([]);
   const [checklistStatus, setChecklistStatus] = useState("");
@@ -1976,6 +1977,7 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
     setWebsite(task?.website || "");
     setRecurrence("none");
     setBreakdown([]);
+    setBreakdownStatus("");
     const savedChecklist = normalizeChecklist(task?.checklist);
     setChecklist(savedChecklist);
     setChecklistOpen(!!savedChecklist.length);
@@ -1995,11 +1997,39 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
     } else {
       onSave({ id: `task-${Date.now()}`, name: name.trim(), category, date, points, done: false, important, notes: notes.trim(), website: normalizeWebsite(website), checklist: cleanChecklist, recurrence });
     }
-    setName(""); setCategory(categories[0] || ""); setPoints(10); setImportant(false); setNotes(""); setWebsite(""); setRecurrence("none"); setChecklist([]); setChecklistOpen(false); setChecklistStatus(""); setDatePickerOpen(false); onClose();
+    setName(""); setCategory(categories[0] || ""); setPoints(10); setImportant(false); setNotes(""); setWebsite(""); setRecurrence("none"); setBreakdown([]); setBreakdownStatus(""); setChecklist([]); setChecklistOpen(false); setChecklistStatus(""); setDatePickerOpen(false); onClose();
   }
-  function createBreakdown() {
+  async function createBreakdown() {
     if (!name.trim()) return;
-    setBreakdown(breakDownTask(name.trim(), category, date, points));
+    const fallback = breakDownTask(name.trim(), category, date, points);
+    setBreakdownStatus("Breaking it down...");
+    try {
+      const result = await askAI("breakdown", {
+        task: {
+          name: name.trim(),
+          notes: notes.trim(),
+          website: normalizeWebsite(website),
+          category,
+          date,
+          points,
+          important,
+        },
+        profile,
+      }, aiAccessToken);
+      const items = normalizeChecklist(result.items || []).map((item) => ({
+        name: item.text,
+        category,
+        date,
+        points: Math.max(5, Math.min(10, Math.round(points / 2))),
+        important: false,
+      }));
+      if (!items.length) throw new Error("No useful breakdown returned.");
+      setBreakdown(items);
+      setBreakdownStatus("Suggested smaller tasks.");
+    } catch (error) {
+      setBreakdown(fallback);
+      setBreakdownStatus("Using built-in breakdown.");
+    }
   }
   function addBreakdownTasks() {
     breakdown.forEach((item, index) => onSave({ ...item, id: `task-${Date.now()}-${index}`, done: false }));
@@ -2050,7 +2080,8 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
             <div className="mb-5 flex items-center justify-between"><h2 className="text-xl font-bold tracking-tight text-[#112849]">{task ? "Edit task" : "Add a task"}</h2><button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-slate-100 text-slate-500"><X size={18}/></button></div>
             <div className="space-y-4">
               <label className="block"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Task</span><input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="What needs doing?" className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[var(--theme-accent)]" /></label>
-              <button type="button" onClick={createBreakdown} className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--theme-ring)] bg-[var(--theme-soft)] py-3 text-sm font-semibold text-[#112849]"><Sparkles size={16} /> Break into smaller tasks</button>
+              <button type="button" onClick={createBreakdown} disabled={!name.trim()} className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--theme-ring)] bg-[var(--theme-soft)] py-3 text-sm font-semibold text-[#112849] disabled:bg-slate-100 disabled:text-slate-400"><Sparkles size={16} /> Break into smaller tasks</button>
+              {breakdownStatus && <p className="-mt-2 text-xs font-medium text-slate-400">{breakdownStatus}</p>}
               <div className="rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-200/70">
                 <div className="flex items-center justify-between gap-3">
                   <div>
