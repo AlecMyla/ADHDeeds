@@ -12,6 +12,7 @@ import {
   ExternalLink,
   Flame,
   Home,
+  MapPin,
   Minus,
   Pencil,
   Plus,
@@ -310,7 +311,19 @@ function seedData() {
     categories: DEFAULT_CATEGORIES,
     recurringTasks: [],
     profile: defaultProfile(),
-    ui: { todayOrder: TODAY_SECTION_ORDER, weekOrder: WEEK_SECTION_ORDER, todayWidths: {}, weekWidths: {}, hiddenFeatures: [], enabledFeatures: [], theme: DEFAULT_THEME_ID },
+    ui: { todayOrder: TODAY_SECTION_ORDER, weekOrder: WEEK_SECTION_ORDER, todayWidths: {}, weekWidths: {}, hiddenFeatures: [], enabledFeatures: [], theme: DEFAULT_THEME_ID, weatherLocation: null },
+  };
+}
+function normalizeWeatherLocation(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const latitude = Number(raw.latitude);
+  const longitude = Number(raw.longitude);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return null;
+  return {
+    mode: raw.mode === "device" ? "device" : "manual",
+    name: String(raw.name || "").trim(),
+    latitude,
+    longitude,
   };
 }
 function normalizeData(raw) {
@@ -351,6 +364,7 @@ function normalizeData(raw) {
     ? raw.ui.enabledFeatures.filter((item) => BETA_FEATURE_OPTIONS.some((option) => option.id === item))
     : [];
   const theme = THEME_OPTIONS.some((option) => option.id === raw.ui?.theme) ? raw.ui.theme : DEFAULT_THEME_ID;
+  const weatherLocation = normalizeWeatherLocation(raw.ui?.weatherLocation);
   const todayWidths = normalizeLayoutWidths(todayOrder, normalizeSectionWidths(raw.ui?.todayWidths, TODAY_SECTION_ORDER), true);
   const weekWidths = normalizeLayoutWidths(weekOrder, normalizeSectionWidths(raw.ui?.weekWidths, WEEK_SECTION_ORDER), false);
   const recurringCategories = recurringTasks.map((task) => task.category).filter(Boolean);
@@ -368,7 +382,7 @@ function normalizeData(raw) {
     brainDump,
     recurringTasks,
     profile: normalizeProfile(raw.profile),
-    ui: { ...(raw.ui || {}), todayOrder, weekOrder, todayWidths, weekWidths, hiddenFeatures, enabledFeatures, theme },
+    ui: { ...(raw.ui || {}), todayOrder, weekOrder, todayWidths, weekWidths, hiddenFeatures, enabledFeatures, theme, weatherLocation },
     categories,
   };
 }
@@ -832,7 +846,77 @@ function ProfileSetupPage({ profile, onSave, onSignOut }) {
   );
 }
 
-function ProfileSheet({ open, onClose, session, authLoading, syncStatus, notificationsEnabled, notificationSupported, profile, hiddenFeatures, enabledFeatures, theme, onSaveProfile, onToggleFeature, onToggleEnabledFeature, onSetTheme, onResetLayout, onEnableNotifications, onGoogleSignIn, onSignIn, onSignOut }) {
+function WeatherLocationSettings({ weatherLocation, onSave }) {
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("");
+  const locationLabel = weatherLocation?.name || (weatherLocation ? "Saved location" : "No location set");
+
+  async function useDeviceLocation() {
+    if (!navigator.geolocation) {
+      setStatus("Location is not supported in this browser.");
+      return;
+    }
+    setStatus("Waiting for permission...");
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const latitude = Number(position.coords.latitude.toFixed(4));
+        const longitude = Number(position.coords.longitude.toFixed(4));
+        onSave({ mode: "device", name: "Device location", latitude, longitude });
+        setStatus("Device location saved.");
+      },
+      () => setStatus("Location was not allowed. You can search a town instead."),
+      { enableHighAccuracy: false, timeout: 12000, maximumAge: 1000 * 60 * 60 },
+    );
+  }
+
+  async function searchPlace(event) {
+    event.preventDefault();
+    const name = query.trim();
+    if (!name) return;
+    setStatus("Searching...");
+    try {
+      const response = await fetch(`https://geocoding-api.open-meteo.com/v1/search?${new URLSearchParams({ name, count: "1", language: "en", format: "json" })}`);
+      const data = await response.json();
+      const place = data?.results?.[0];
+      if (!place) {
+        setStatus("No matching place found.");
+        return;
+      }
+      const label = [place.name, place.admin1, place.country].filter(Boolean).join(", ");
+      onSave({ mode: "manual", name: label, latitude: place.latitude, longitude: place.longitude });
+      setStatus(`${label} saved.`);
+    } catch {
+      setStatus("Could not search right now.");
+    }
+  }
+
+  return (
+    <div className="rounded-xl bg-slate-50 p-3">
+      <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <MapPin size={14} /> Weather location
+      </div>
+      <div className="rounded-xl bg-white p-3 text-xs leading-5 text-slate-500 ring-1 ring-slate-200">
+        <div className="font-semibold text-[#112849]">{locationLabel}</div>
+        <div>Used only for Today’s Considerations.</div>
+      </div>
+      <button type="button" onClick={useDeviceLocation} className="mt-2 w-full rounded-xl bg-[var(--theme-soft)] px-3 py-2 text-xs font-semibold text-[var(--theme-accent)] ring-1 ring-[var(--theme-ring)]">
+        Use my location
+      </button>
+      <form onSubmit={searchPlace} className="mt-2 flex gap-2">
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search town or city" className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2 text-xs outline-none focus:border-[var(--theme-accent)]" />
+        <button type="submit" className="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">Save</button>
+      </form>
+      {weatherLocation && (
+        <button type="button" onClick={() => onSave(null)} className="mt-2 text-xs font-semibold text-slate-400 hover:text-rose-500">
+          Clear weather location
+        </button>
+      )}
+      {status && <div className="mt-2 text-xs text-slate-400">{status}</div>}
+    </div>
+  );
+}
+
+function ProfileSheet({ open, onClose, session, authLoading, syncStatus, notificationsEnabled, notificationSupported, profile, hiddenFeatures, enabledFeatures, theme, weatherLocation, onSaveProfile, onToggleFeature, onToggleEnabledFeature, onSetTheme, onSaveWeatherLocation, onResetLayout, onEnableNotifications, onGoogleSignIn, onSignIn, onSignOut }) {
   const [customiseOpen, setCustomiseOpen] = useState(false);
   const [submenu, setSubmenu] = useState("main");
   useEffect(() => {
@@ -916,6 +1000,7 @@ function ProfileSheet({ open, onClose, session, authLoading, syncStatus, notific
                       </button>
                     );
                   })}
+                  <WeatherLocationSettings weatherLocation={weatherLocation} onSave={onSaveWeatherLocation} />
                   <button onClick={onResetLayout} className="flex w-full items-center justify-between rounded-xl bg-[var(--theme-soft)] px-3 py-2 text-sm font-semibold text-[var(--theme-accent)] ring-1 ring-[var(--theme-ring)]">
                     <span>Reset screen layout</span>
                     <Settings2 size={15} />
@@ -1071,7 +1156,7 @@ function fallbackConsiderations(today, tasks, habits, profile = defaultProfile()
   };
 }
 
-function TodayConsiderationsCard({ today, tasks, habits, profile, aiAccessToken }) {
+function TodayConsiderationsCard({ today, tasks, habits, profile, weatherLocation, aiAccessToken }) {
   const [briefing, setBriefing] = useState(null);
   const [status, setStatus] = useState("");
   const todayKey = isoDate(today);
@@ -1099,9 +1184,10 @@ function TodayConsiderationsCard({ today, tasks, habits, profile, aiAccessToken 
           completedToday: !!habit.ticks[todayKey],
         })),
         profile,
+        weatherLocation,
       }, aiAccessToken);
       setBriefing(result);
-      setStatus(result.weatherUnavailable ? "Weather not connected" : "Updated");
+      setStatus(result.weatherUnavailable ? "Add a weather location in Me > Customise" : "Updated");
     } catch (error) {
       setBriefing(fallbackConsiderations(today, tasks, habits, profile));
       setStatus(error.message || "Using built-in considerations");
@@ -1330,7 +1416,7 @@ function TodaySection({ id, children, onMove, onPreview, onClearPreview, onPoint
   );
 }
 
-function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, profile, hiddenFeatures, enabledFeatures, aiAccessToken, themeColor, todaySectionOrder, todaySectionWidths, onPreviousDay, onNextDay, onJumpToday, onReorderSection, onToggleTask, onToggleChecklistItem, onToggleHabit, onEditTask, onRemoveTask, onAddTask, onAddBrainDumpItems, onRemoveBrainDumpItem, onConvertBrainDumpItem, onAddCategory, onReframeTask, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, nudges, points, progress }) {
+function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, profile, hiddenFeatures, enabledFeatures, weatherLocation, aiAccessToken, themeColor, todaySectionOrder, todaySectionWidths, onPreviousDay, onNextDay, onJumpToday, onReorderSection, onToggleTask, onToggleChecklistItem, onToggleHabit, onEditTask, onRemoveTask, onAddTask, onAddBrainDumpItems, onRemoveBrainDumpItem, onConvertBrainDumpItem, onAddCategory, onReframeTask, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, nudges, points, progress }) {
   const selectedKey = isoDate(selectedDate);
   const todayKey = isoDate(today);
   const isToday = selectedKey === todayKey;
@@ -1345,7 +1431,7 @@ function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, 
       content: <DailyPlanCard today={selectedDate} tasks={tasks} habits={hidden.has("habitsInDailyPlan") ? [] : habits} aiAccessToken={aiAccessToken} />,
     },
     considerations: {
-      content: <TodayConsiderationsCard today={selectedDate} tasks={tasks} habits={habits} profile={profile} aiAccessToken={aiAccessToken} />,
+      content: <TodayConsiderationsCard today={selectedDate} tasks={tasks} habits={habits} profile={profile} weatherLocation={weatherLocation} aiAccessToken={aiAccessToken} />,
     },
     tasks: {
       content: (
@@ -2707,6 +2793,9 @@ export default function ADHDeedsApp() {
     if (!THEME_OPTIONS.some((option) => option.id === themeId)) return;
     setData((old) => ({ ...old, ui: { ...(old.ui || {}), theme: themeId } }));
   }
+  function saveWeatherLocation(location) {
+    setData((old) => ({ ...old, ui: { ...(old.ui || {}), weatherLocation: normalizeWeatherLocation(location) } }));
+  }
   async function openReframeTask(task) {
     const fallback = {
       task,
@@ -2815,7 +2904,7 @@ export default function ADHDeedsApp() {
             <button key={tab.id} onClick={() => setView(tab.id)} className={`rounded-full px-5 py-2.5 text-sm font-semibold ${view === tab.id ? "bg-[var(--theme-header)] text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>{tab.label}</button>
           ))}
         </div>
-        {view === "today" && <TodayView today={today} selectedDate={selectedTodayDate} tasks={weekTasks} habits={data.habits} brainDump={data.brainDump || []} categories={categories} profile={profile} hiddenFeatures={hiddenFeatures} enabledFeatures={enabledFeatures} aiAccessToken={session?.access_token} themeColor={selectedThemeColors.header} todaySectionOrder={todaySectionOrder} todaySectionWidths={todaySectionWidths} onPreviousDay={() => moveTodayDate(-1)} onNextDay={() => moveTodayDate(1)} onJumpToday={() => setTodayDate(new Date())} onReorderSection={reorderTodaySection} onToggleTask={toggleTask} onToggleChecklistItem={toggleChecklistItem} onToggleHabit={toggleHabit} onEditTask={openEditTask} onRemoveTask={removeTask} onAddTask={openAddTask} onAddBrainDumpItems={addBrainDumpItems} onRemoveBrainDumpItem={removeBrainDumpItem} onConvertBrainDumpItem={convertBrainDumpItem} onAddCategory={() => setCategorySheetOpen(true)} onReframeTask={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} nudges={categoryNudges} points={points} progress={todayProgress} />}
+        {view === "today" && <TodayView today={today} selectedDate={selectedTodayDate} tasks={weekTasks} habits={data.habits} brainDump={data.brainDump || []} categories={categories} profile={profile} hiddenFeatures={hiddenFeatures} enabledFeatures={enabledFeatures} weatherLocation={data.ui?.weatherLocation || null} aiAccessToken={session?.access_token} themeColor={selectedThemeColors.header} todaySectionOrder={todaySectionOrder} todaySectionWidths={todaySectionWidths} onPreviousDay={() => moveTodayDate(-1)} onNextDay={() => moveTodayDate(1)} onJumpToday={() => setTodayDate(new Date())} onReorderSection={reorderTodaySection} onToggleTask={toggleTask} onToggleChecklistItem={toggleChecklistItem} onToggleHabit={toggleHabit} onEditTask={openEditTask} onRemoveTask={removeTask} onAddTask={openAddTask} onAddBrainDumpItems={addBrainDumpItems} onRemoveBrainDumpItem={removeBrainDumpItem} onConvertBrainDumpItem={convertBrainDumpItem} onAddCategory={() => setCategorySheetOpen(true)} onReframeTask={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} nudges={categoryNudges} points={points} progress={todayProgress} />}
         {view === "week" && <WeekView days={days} tasks={weekTasks} weekSectionOrder={weekSectionOrder} weekSectionWidths={weekSectionWidths} hiddenFeatures={hiddenFeatures} themeColor={selectedThemeColors.header} onReorderSection={reorderWeekSection} onToggle={toggleTask} onToggleChecklistItem={toggleChecklistItem} onRemove={removeTask} onEdit={openEditTask} onAddTask={openAddTask} onReframe={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} onMoveTask={moveTask} today={today} points={points} taskPoints={taskPoints} habitPoints={habitPoints} nudges={categoryNudges} />}
         {view === "dumpster" && <BrainDumpsterView items={data.brainDump || []} categories={categories} onAddItems={addBrainDumpItems} onRemoveItem={removeBrainDumpItem} onConvertItem={convertBrainDumpItem} onAddCategory={() => setCategorySheetOpen(true)} />}
         {view === "habits" && <HabitsView days={days} habits={data.habits} onToggle={toggleHabit} onAdd={openAddHabit} onEdit={openEditHabit} onRemove={removeHabit} />}
@@ -2825,7 +2914,7 @@ export default function ADHDeedsApp() {
       <AddTaskSheet open={sheetOpen} onClose={closeSheet} onSave={addTask} onUpdate={updateTask} days={days} task={editingTask} initialDate={newTaskDate} initialName={brainTaskDraft?.text || ""} categories={categories} profile={profile} onAddCategory={() => setCategorySheetOpen(true)} aiAccessToken={session?.access_token} />
       <HabitSheet open={habitSheetOpen} onClose={closeHabitSheet} onSave={addHabit} onUpdate={updateHabit} habit={editingHabit} />
       <CategorySheet open={categorySheetOpen} onClose={() => setCategorySheetOpen(false)} onSave={addCategory} />
-      <ProfileSheet open={profileOpen} onClose={() => setProfileOpen(false)} session={session} authLoading={authLoading} syncStatus={syncStatus} notificationsEnabled={notificationsEnabled} notificationSupported={notificationSupported} profile={profile} hiddenFeatures={hiddenFeatures} enabledFeatures={enabledFeatures} theme={selectedTheme} onSaveProfile={saveProfile} onToggleFeature={toggleFeature} onToggleEnabledFeature={toggleEnabledFeature} onSetTheme={setTheme} onResetLayout={resetScreenLayout} onEnableNotifications={enableNotifications} onGoogleSignIn={signInWithGoogle} onSignIn={signIn} onSignOut={signOut} />
+      <ProfileSheet open={profileOpen} onClose={() => setProfileOpen(false)} session={session} authLoading={authLoading} syncStatus={syncStatus} notificationsEnabled={notificationsEnabled} notificationSupported={notificationSupported} profile={profile} hiddenFeatures={hiddenFeatures} enabledFeatures={enabledFeatures} theme={selectedTheme} weatherLocation={data.ui?.weatherLocation || null} onSaveProfile={saveProfile} onToggleFeature={toggleFeature} onToggleEnabledFeature={toggleEnabledFeature} onSetTheme={setTheme} onSaveWeatherLocation={saveWeatherLocation} onResetLayout={resetScreenLayout} onEnableNotifications={enableNotifications} onGoogleSignIn={signInWithGoogle} onSignIn={signIn} onSignOut={signOut} />
       <AISheet insight={aiInsight} onClose={() => setAiInsight(null)} onAddFirstStep={addFirstStepTask} />
       <AIToast message={rescheduleAdvice} onClose={() => setRescheduleAdvice("")} />
     </div>

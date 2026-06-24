@@ -2,10 +2,6 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY;
-const METOFFICE_API_KEY = process.env.METOFFICE_API_KEY;
-const METOFFICE_LATITUDE = process.env.METOFFICE_LATITUDE;
-const METOFFICE_LONGITUDE = process.env.METOFFICE_LONGITUDE;
-const METOFFICE_API_URL = process.env.METOFFICE_API_URL;
 
 function json(res, status, body) {
   res.status(status).setHeader("Content-Type", "application/json");
@@ -90,50 +86,50 @@ Data: ${JSON.stringify(payload)}`;
   throw new Error("Unknown AI request type.");
 }
 
-function findFirstNumber(value, names) {
-  if (!value || typeof value !== "object") return null;
-  const stack = [value];
-  while (stack.length) {
-    const current = stack.shift();
-    if (!current || typeof current !== "object") continue;
-    for (const [key, raw] of Object.entries(current)) {
-      if (names.some((name) => key.toLowerCase().includes(name.toLowerCase()))) {
-        const number = Number(raw?.value ?? raw);
-        if (Number.isFinite(number)) return number;
-      }
-      if (raw && typeof raw === "object") stack.push(raw);
-    }
-  }
-  return null;
+function validCoordinate(value, min, max) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= min && number <= max ? number : null;
 }
 
-function simplifyWeather(data) {
-  if (!data) return null;
-  return {
-    source: "Met Office",
-    uvIndex: findFirstNumber(data, ["uvIndex", "uv-index", "uv"]),
-    feelsLikeTempC: findFirstNumber(data, ["feelsLike", "feels-like", "apparent"]),
-    rainProbability: findFirstNumber(data, ["probOfPrecipitation", "precip-prob", "precipitationProbability", "Pp"]),
-    rainAmountMm: findFirstNumber(data, ["totalPrecipAmount", "precip-total", "precipitationAmount"]),
+async function fetchForecast(url) {
+  const response = await fetch(url);
+  if (!response.ok) return null;
+  return response.json();
+}
+
+async function fetchOpenMeteoWeather(location = {}) {
+  const latitude = validCoordinate(location.latitude, -90, 90);
+  const longitude = validCoordinate(location.longitude, -180, 180);
+  if (latitude === null || longitude === null) return { weather: null, weatherUnavailable: true };
+
+  const baseParams = {
+    latitude: latitude.toFixed(4),
+    longitude: longitude.toFixed(4),
+    current: "apparent_temperature,precipitation,rain,showers,weather_code",
+    daily: "uv_index_max,precipitation_probability_max,precipitation_sum,apparent_temperature_max,apparent_temperature_min",
+    forecast_days: "1",
+    timezone: "auto",
   };
-}
+  const buildUrl = (extra = {}) => {
+    const params = new URLSearchParams({ ...baseParams, ...extra });
+    return `https://api.open-meteo.com/v1/forecast?${params.toString()}`;
+  };
 
-async function fetchMetOfficeWeather() {
-  if (!METOFFICE_API_KEY) return { weather: null, weatherUnavailable: true };
-  const url = METOFFICE_API_URL
-    || (METOFFICE_LATITUDE && METOFFICE_LONGITUDE
-      ? `https://data.hub.api.metoffice.gov.uk/sitespecific/v0/point/daily?latitude=${METOFFICE_LATITUDE}&longitude=${METOFFICE_LONGITUDE}`
-      : "");
-  if (!url) return { weather: null, weatherUnavailable: true };
-  const response = await fetch(url, {
-    headers: {
-      apikey: METOFFICE_API_KEY,
-      "x-api-key": METOFFICE_API_KEY,
-    },
-  });
-  if (!response.ok) return { weather: null, weatherUnavailable: true };
-  const data = await response.json();
-  return { weather: simplifyWeather(data), weatherUnavailable: false };
+  const data = await fetchForecast(buildUrl({ models: "ukmo_seamless" })) || await fetchForecast(buildUrl());
+  if (!data) return { weather: null, weatherUnavailable: true };
+
+  const current = data.current || {};
+  const daily = data.daily || {};
+  const weather = {
+    source: "Open-Meteo UK Met Office",
+    locationName: String(location.name || "").trim(),
+    uvIndex: daily.uv_index_max?.[0] ?? null,
+    feelsLikeTempC: current.apparent_temperature ?? daily.apparent_temperature_max?.[0] ?? null,
+    rainProbability: daily.precipitation_probability_max?.[0] ?? null,
+    rainAmountMm: daily.precipitation_sum?.[0] ?? current.precipitation ?? current.rain ?? current.showers ?? null,
+    weatherCode: current.weather_code ?? null,
+  };
+  return { weather, weatherUnavailable: false };
 }
 
 function parseContent(data) {
@@ -196,7 +192,7 @@ export default async function handler(req, res) {
 
   try {
     const { type, payload = {} } = requestBody(req);
-    const weatherContext = type === "today-considerations" ? await fetchMetOfficeWeather() : {};
+    const weatherContext = type === "today-considerations" ? await fetchOpenMeteoWeather(payload.weatherLocation) : {};
     const prompt = buildPrompt(type, { ...payload, ...weatherContext });
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
