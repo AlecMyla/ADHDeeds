@@ -76,6 +76,9 @@ Create a short beta briefing for today.
 Use weather when present: UV index, feels-like temperature, and rain/probability of precipitation.
 Give practical suggestions such as umbrella, sunscreen, jumper, timing outdoor errands, or lighter physical load.
 Use task/habit signals to spot overload, repeated moving, missed habits, growing friction, or checklist-heavy days.
+Use profile.hobbies and profile.interests as restorative context, especially if the user seems in a rut, has a blank/light day, has mostly admin tasks, or has no visible task connected to something they enjoy.
+Be creative but grounded: suggest tiny hobby/interest-adjacent actions, sensory resets, curiosity prompts, or a small reward bridge that fits the day. Do not turn hobbies into guilt or another obligation.
+Examples of the style: if they like music, suggest one song while starting the first task; if they like football, suggest checking fixtures after one admin win; if they like gardening, suggest two minutes outside before a hard task; if they like reading, suggest one page as a reset.
 For rut advice, use research-led but plain-language strategies: reduce activation energy, implementation intentions, two-minute start, environmental cue, body doubling, task chunking, and self-compassion.
 Use profile context lightly for tone and relevance. If profile.adhdStatus is "Undiagnosed" or "Exploring", you may include a gentle, UK-context note that they can ask their GP about NHS ADHD assessment options and Right to Choose in England, but do not diagnose or imply they have ADHD.
 Do not mention research papers or clinical claims.

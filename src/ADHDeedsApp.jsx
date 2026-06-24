@@ -1136,22 +1136,36 @@ function CategoryNudges({ nudges, onAskOpinion }) {
   );
 }
 
+function profileTopics(profile = {}) {
+  return `${profile.hobbies || ""},${profile.interests || ""}`
+    .split(/[,;\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 4);
+}
+
 function fallbackConsiderations(today, tasks, habits, profile = defaultProfile()) {
   const todayKey = isoDate(today);
   const todayTasks = tasks.filter((task) => task.date === todayKey && !task.done);
   const movedTasks = todayTasks.filter((task) => task.movedCount || task.penaltyCount).length;
   const openHabits = habits.filter((habit) => !habit.ticks[todayKey]).length;
+  const topics = profileTopics(profile);
+  const taskText = todayTasks.map((task) => `${task.name} ${task.category || ""} ${task.notes || ""}`).join(" ").toLowerCase();
+  const missingEnjoyment = topics.length && !topics.some((topic) => taskText.includes(topic.toLowerCase()));
   const considerations = [];
   if (todayTasks.length >= 5) considerations.push("This is a fuller day. Pick one task to protect and let the rest queue behind it.");
   if (movedTasks) considerations.push("A few tasks look like they have been carried forward. Try shrinking one to a two-minute first step.");
   if (openHabits >= 3) considerations.push("Several habits are still open. Choose one anchor habit rather than trying to rescue everything at once.");
   if (todayTasks.some((task) => /call|phone|appointment|gp|dentist|book|submit|pay/i.test(task.name))) considerations.push("There is a time-sensitive-looking task here. Doing it earlier may reduce friction.");
+  if (missingEnjoyment) considerations.push(`There is not much ${topics[0]} in today. Use it as a small reset: two minutes, one tiny choice, no pressure to make it productive.`);
   if (["Undiagnosed", "Exploring"].includes(profile.adhdStatus)) considerations.push("If ADHD is affecting daily life, you can ask your GP about NHS assessment options, including Right to Choose in England.");
   if (!considerations.length) considerations.push("Nothing is shouting for attention. A steady start is enough.");
   return {
     weather: [],
     planning: considerations.slice(0, 3),
-    rut: "If you feel stuck, make the first action smaller rather than pushing harder.",
+    rut: topics.length
+      ? `If you feel stuck, borrow a little energy from ${topics[0]}: pair it with the first two-minute step, then stop before it becomes another job.`
+      : "If you feel stuck, make the first action smaller rather than pushing harder.",
     protect: todayTasks.sort((a, b) => Number(b.important) - Number(a.important) || b.points - a.points)[0]?.name || "one easy win",
   };
 }
