@@ -480,7 +480,93 @@ function Logo({ size = "header" }) {
   return <img src="/adhdeeds-header-logo.png" alt="ADHDeeds" className="h-12 w-auto max-w-[210px] object-contain sm:max-w-[260px]" />;
 }
 
-function TaskRow({ task, onToggle, onToggleChecklistItem, onRemove, onEdit, onReframe, onMoveTomorrow, onMoveTomorrowPenalty, onDragStart, compact = false, showWebsite = false, themeColor }) {
+function MiniCalendar({ value, onChange, weekMode = false }) {
+  const selectedDate = new Date(`${value || isoDate(new Date())}T00:00:00`);
+  const [monthDate, setMonthDate] = useState(() => new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1));
+  useEffect(() => {
+    setMonthDate(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1));
+  }, [value]);
+  const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+  const gridStart = startOfWeek(monthStart);
+  const days = Array.from({ length: 42 }, (_, index) => addDays(gridStart, index));
+  const selectedKey = isoDate(selectedDate);
+  const selectedWeekStart = isoDate(startOfWeek(selectedDate));
+  function shiftMonth(amount) {
+    setMonthDate((current) => new Date(current.getFullYear(), current.getMonth() + amount, 1));
+  }
+
+  return (
+    <div className="rounded-2xl bg-white p-3 ring-1 ring-slate-200">
+      <div className="mb-3 flex items-center justify-between">
+        <button type="button" onClick={() => shiftMonth(-1)} className="grid h-9 w-9 place-items-center rounded-xl bg-slate-50 text-slate-500 hover:bg-slate-100" aria-label="Previous month"><ChevronLeft size={17} /></button>
+        <div className="text-center">
+          <div className="text-sm font-bold text-[#112849]">{monthDate.toLocaleDateString("en-GB", { month: "long", year: "numeric" })}</div>
+          {weekMode && <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Pick any day in the week</div>}
+        </div>
+        <button type="button" onClick={() => shiftMonth(1)} className="grid h-9 w-9 place-items-center rounded-xl bg-slate-50 text-slate-500 hover:bg-slate-100" aria-label="Next month"><ChevronRight size={17} /></button>
+      </div>
+      <div className="grid grid-cols-7 gap-1">
+        {["M", "T", "W", "T", "F", "S", "S"].map((day, index) => (
+          <div key={`${day}-${index}`} className="py-1 text-center text-[10px] font-bold uppercase text-slate-400">{day}</div>
+        ))}
+        {days.map((day) => {
+          const dayKey = isoDate(day);
+          const inMonth = day.getMonth() === monthDate.getMonth();
+          const selected = weekMode ? isoDate(startOfWeek(day)) === selectedWeekStart : dayKey === selectedKey;
+          const isToday = dayKey === isoDate(new Date());
+          return (
+            <button
+              type="button"
+              key={dayKey}
+              onClick={() => onChange(dayKey)}
+              className={`relative aspect-square rounded-xl text-sm font-semibold transition ${
+                selected
+                  ? "bg-[var(--theme-accent)] text-white shadow-sm"
+                  : inMonth
+                    ? "bg-slate-50 text-slate-700 hover:bg-[var(--theme-soft)] hover:text-[var(--theme-accent)]"
+                    : "bg-transparent text-slate-300 hover:bg-slate-50"
+              }`}
+            >
+              {pretty(day, { day: "numeric" })}
+              {isToday && !selected && <span className="absolute bottom-1 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-[var(--theme-accent)]" />}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function MoveTasksSheet({ open, count, initialDate, onClose, onMove }) {
+  const [date, setDate] = useState(initialDate || isoDate(new Date()));
+  useEffect(() => {
+    if (open) setDate(initialDate || isoDate(new Date()));
+  }, [open, initialDate]);
+  return (
+    <AnimatePresence>
+      {open && (
+        <>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="fixed inset-0 z-40 bg-slate-950/40" />
+          <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 14 }} className="fixed inset-x-4 top-1/2 z-50 mx-auto max-w-sm -translate-y-1/2 rounded-3xl bg-white p-4 shadow-2xl">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold text-[#112849]">Move {count} task{count === 1 ? "" : "s"}</h2>
+                <p className="mt-1 text-xs text-slate-400">Choose the new date.</p>
+              </div>
+              <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-slate-100 text-slate-500"><X size={18} /></button>
+            </div>
+            <MiniCalendar value={date} onChange={setDate} />
+            <button type="button" onClick={() => onMove(date)} className="mt-3 w-full rounded-xl bg-[var(--theme-accent)] py-3 text-sm font-semibold text-white">
+              Move to {pretty(new Date(`${date}T00:00:00`), { weekday: "short", day: "numeric", month: "short" })}
+            </button>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+}
+
+function TaskRow({ task, onToggle, onToggleChecklistItem, onRemove, onEdit, onReframe, onMoveTomorrow, onMoveTomorrowPenalty, onDragStart, selectable = false, selected = false, onSelect, compact = false, showWebsite = false, themeColor }) {
   const [noteOpen, setNoteOpen] = useState(false);
   const [notePosition, setNotePosition] = useState({ left: 0, top: 0 });
   const [checklistOpen, setChecklistOpen] = useState(false);
@@ -583,6 +669,18 @@ function TaskRow({ task, onToggle, onToggleChecklistItem, onRemove, onEdit, onRe
         transition: swipeSettling ? "transform 220ms cubic-bezier(.2,1.4,.35,1)" : "none",
       }}
     >
+      {selectable && (
+        <button
+          type="button"
+          onClick={(event) => { event.stopPropagation(); onSelect?.(task.id); }}
+          aria-label={selected ? "Deselect task" : "Select task"}
+          className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border transition ${
+            selected ? "border-[var(--theme-accent)] bg-[var(--theme-accent)] text-white" : "border-slate-300 bg-white text-transparent"
+          }`}
+        >
+          <Check size={12} strokeWidth={3} />
+        </button>
+      )}
       <button
         onClick={(event) => { event.stopPropagation(); onToggle(task.id); }}
         disabled={!task.done && hasChecklist && !checklistComplete}
@@ -716,7 +814,9 @@ function Header({ activeWeek, setActiveWeek, onProfile, points }) {
             <div className="absolute left-1/2 top-12 z-30 w-64 -translate-x-1/2 rounded-2xl bg-white p-4 text-slate-900 shadow-2xl ring-1 ring-slate-200">
               <div className="text-sm font-bold text-[#112849]">Jump to week</div>
               <p className="mt-1 text-xs text-slate-400">Choose any date. ADHDeeds will open that week.</p>
-              <input type="date" value={isoDate(activeWeek)} onChange={(event) => pickDate(event.target.value)} className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[var(--theme-accent)]" />
+              <div className="mt-3">
+                <MiniCalendar value={isoDate(activeWeek)} onChange={pickDate} weekMode />
+              </div>
               <button onClick={() => setPickerOpen(false)} className="mt-3 w-full rounded-xl bg-slate-100 py-2 text-xs font-semibold text-slate-500">Close</button>
             </div>
           )}
@@ -1430,7 +1530,7 @@ function TodaySection({ id, children, onMove, onPreview, onClearPreview, onPoint
   );
 }
 
-function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, profile, hiddenFeatures, enabledFeatures, weatherLocation, aiAccessToken, themeColor, todaySectionOrder, todaySectionWidths, onPreviousDay, onNextDay, onJumpToday, onReorderSection, onToggleTask, onToggleChecklistItem, onToggleHabit, onEditTask, onRemoveTask, onAddTask, onAddBrainDumpItems, onRemoveBrainDumpItem, onConvertBrainDumpItem, onAddCategory, onReframeTask, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, nudges, points, progress }) {
+function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, profile, hiddenFeatures, enabledFeatures, weatherLocation, aiAccessToken, themeColor, todaySectionOrder, todaySectionWidths, onPreviousDay, onNextDay, onJumpToday, onReorderSection, onToggleTask, onToggleChecklistItem, onToggleHabit, onEditTask, onRemoveTask, onAddTask, onAddBrainDumpItems, onRemoveBrainDumpItem, onConvertBrainDumpItem, onAddCategory, onReframeTask, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, onMoveTasks, nudges, points, progress }) {
   const selectedKey = isoDate(selectedDate);
   const todayKey = isoDate(today);
   const isToday = selectedKey === todayKey;
@@ -1438,7 +1538,23 @@ function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, 
   const pointerDrag = useRef(null);
   const [layoutPreview, setLayoutPreview] = useState(null);
   const [draggingSection, setDraggingSection] = useState("");
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedTaskIds, setSelectedTaskIds] = useState([]);
+  const [moveSheetOpen, setMoveSheetOpen] = useState(false);
   const todaysTasks = tasks.filter((t) => t.date === selectedKey);
+  const selectedCount = selectedTaskIds.length;
+  useEffect(() => {
+    setSelectedTaskIds((ids) => ids.filter((id) => todaysTasks.some((task) => task.id === id)));
+  }, [selectedKey, tasks]);
+  function toggleSelectedTask(id) {
+    setSelectedTaskIds((ids) => ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id]);
+  }
+  function finishMoveSelected(date) {
+    onMoveTasks(selectedTaskIds, date);
+    setMoveSheetOpen(false);
+    setSelectedTaskIds([]);
+    setSelectionMode(false);
+  }
   const hidden = new Set(hiddenFeatures);
   const sections = {
     plan: {
@@ -1452,8 +1568,28 @@ function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, 
         <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-slate-200/70">
           <div className="flex items-center justify-between px-2 pb-2 pt-1">
             <h3 className="text-sm font-bold text-[#112849]">{isToday ? "Today’s tasks" : `${pretty(selectedDate, { weekday: "long" })} tasks`}</h3>
-            <span className="text-xs text-slate-400">{todaysTasks.filter((t) => t.done).length} / {todaysTasks.length} complete</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-400">{todaysTasks.filter((t) => t.done).length} / {todaysTasks.length} complete</span>
+              {!!todaysTasks.length && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectionMode((active) => !active);
+                    setSelectedTaskIds([]);
+                  }}
+                  className={`rounded-full px-3 py-1 text-[11px] font-semibold ${selectionMode ? "bg-[var(--theme-header)] text-white" : "bg-slate-100 text-slate-500"}`}
+                >
+                  {selectionMode ? "Done" : "Select"}
+                </button>
+              )}
+            </div>
           </div>
+          {selectionMode && (
+            <div className="mb-2 flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
+              <span className="text-xs font-semibold text-slate-500">{selectedCount} selected</span>
+              <button type="button" onClick={() => setMoveSheetOpen(true)} disabled={!selectedCount} className="rounded-lg bg-[var(--theme-soft)] px-3 py-1.5 text-xs font-semibold text-[var(--theme-accent)] ring-1 ring-[var(--theme-ring)] disabled:bg-slate-100 disabled:text-slate-400 disabled:ring-slate-200">Move selected</button>
+            </div>
+          )}
           <div className="divide-y divide-slate-100">
             {todaysTasks.length ? todaysTasks.map((task) => (
               <TaskRow
@@ -1466,6 +1602,9 @@ function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, 
                 onReframe={onReframeTask}
                 onMoveTomorrow={onMoveTomorrow}
                 onMoveTomorrowPenalty={onMoveTomorrowPenalty}
+                selectable={selectionMode}
+                selected={selectedTaskIds.includes(task.id)}
+                onSelect={toggleSelectedTask}
                 showWebsite
                 themeColor={themeColor}
               />
@@ -1586,11 +1725,12 @@ function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, 
           </TodaySection>
         ))}
       </div>
+      <MoveTasksSheet open={moveSheetOpen} count={selectedCount} initialDate={selectedKey} onClose={() => setMoveSheetOpen(false)} onMove={finishMoveSelected} />
     </motion.div>
   );
 }
 
-function DayCard({ day, tasks, onToggle, onToggleChecklistItem, onRemove, onEdit, onAddTask, onReframe, onMoveTomorrow, onMoveTomorrowPenalty, onDropTask, onDragTask, today, themeColor }) {
+function DayCard({ day, tasks, onToggle, onToggleChecklistItem, onRemove, onEdit, onAddTask, onReframe, onMoveTomorrow, onMoveTomorrowPenalty, onDropTask, onDragTask, selectionMode = false, selectedTaskIds = [], onSelectTask, today, themeColor }) {
   const [dragOver, setDragOver] = useState(false);
   const completed = tasks.filter((t) => t.done).length;
   const pct = tasks.length ? Math.round((completed / tasks.length) * 100) : 0;
@@ -1631,6 +1771,9 @@ function DayCard({ day, tasks, onToggle, onToggleChecklistItem, onRemove, onEdit
               onMoveTomorrow={onMoveTomorrow}
               onMoveTomorrowPenalty={onMoveTomorrowPenalty}
               onDragStart={onDragTask}
+              selectable={selectionMode}
+              selected={selectedTaskIds.includes(task.id)}
+              onSelect={onSelectTask}
               themeColor={themeColor}
             />
           )) : <div className="pt-8 text-center text-xs text-slate-400">Drop tasks here</div>}
@@ -1643,7 +1786,7 @@ function DayCard({ day, tasks, onToggle, onToggleChecklistItem, onRemove, onEdit
   );
 }
 
-function MobileWeekTask({ task, days, onToggle, onToggleChecklistItem, onRemove, onEdit, onReframe, onMoveTask, onMoveTomorrow, onMoveTomorrowPenalty, themeColor }) {
+function MobileWeekTask({ task, days, onToggle, onToggleChecklistItem, onRemove, onEdit, onReframe, onMoveTask, onMoveTomorrow, onMoveTomorrowPenalty, selectionMode = false, selected = false, onSelect, themeColor }) {
   const [moving, setMoving] = useState(false);
 
   return (
@@ -1657,6 +1800,9 @@ function MobileWeekTask({ task, days, onToggle, onToggleChecklistItem, onRemove,
         onReframe={onReframe}
         onMoveTomorrow={onMoveTomorrow}
         onMoveTomorrowPenalty={onMoveTomorrowPenalty}
+        selectable={selectionMode}
+        selected={selected}
+        onSelect={onSelect}
         themeColor={themeColor}
       />
       <div className="px-3 pb-3">
@@ -1690,15 +1836,22 @@ function MobileWeekTask({ task, days, onToggle, onToggleChecklistItem, onRemove,
   );
 }
 
-function WeekView({ days, tasks, weekSectionOrder, weekSectionWidths, hiddenFeatures, themeColor, onReorderSection, onToggle, onToggleChecklistItem, onRemove, onEdit, onAddTask, onReframe, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, onMoveTask, today, points, taskPoints, habitPoints, nudges }) {
+function WeekView({ days, tasks, weekSectionOrder, weekSectionWidths, hiddenFeatures, themeColor, onReorderSection, onToggle, onToggleChecklistItem, onRemove, onEdit, onAddTask, onReframe, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, onMoveTask, onMoveTasks, today, points, taskPoints, habitPoints, nudges }) {
   const initialDay = days.find((day) => isoDate(day) === isoDate(today)) || days[0];
   const [selectedDay, setSelectedDay] = useState(isoDate(initialDay));
   const [layoutPreview, setLayoutPreview] = useState(null);
   const [draggingSection, setDraggingSection] = useState("");
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedTaskIds, setSelectedTaskIds] = useState([]);
+  const [moveSheetOpen, setMoveSheetOpen] = useState(false);
   const pointerDrag = useRef(null);
   const done = tasks.filter((t) => t.done).length;
   const selectedDate = days.find((day) => isoDate(day) === selectedDay) || days[0];
   const selectedTasks = tasks.filter((task) => task.date === selectedDay);
+  const selectedCount = selectedTaskIds.length;
+  useEffect(() => {
+    setSelectedTaskIds((ids) => ids.filter((id) => tasks.some((task) => task.id === id)));
+  }, [tasks]);
   const todayKey = isoDate(today);
   const currentWeekIncludesToday = days.some((day) => isoDate(day) === todayKey);
   const desktopWeekColumns = currentWeekIncludesToday
@@ -1714,7 +1867,31 @@ function WeekView({ days, tasks, weekSectionOrder, weekSectionWidths, hiddenFeat
     : "repeat(7, minmax(0, 1fr))";
   function dragTask(event, taskId) {
     event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData("text/plain", taskId);
+    const ids = selectedTaskIds.includes(taskId) ? selectedTaskIds : [taskId];
+    event.dataTransfer.setData("text/plain", JSON.stringify(ids));
+  }
+  function dropTasks(raw, date) {
+    try {
+      const ids = JSON.parse(raw);
+      if (Array.isArray(ids)) {
+        onMoveTasks(ids, date);
+        setSelectedTaskIds([]);
+        setSelectionMode(false);
+        return;
+      }
+    } catch {
+      // Keep support for old single-id drag payloads.
+    }
+    onMoveTask(raw, date);
+  }
+  function toggleSelectedTask(id) {
+    setSelectedTaskIds((ids) => ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id]);
+  }
+  function finishMoveSelected(date) {
+    onMoveTasks(selectedTaskIds, date);
+    setMoveSheetOpen(false);
+    setSelectedTaskIds([]);
+    setSelectionMode(false);
   }
   const hidden = new Set(hiddenFeatures);
   const sections = {
@@ -1737,7 +1914,16 @@ function WeekView({ days, tasks, weekSectionOrder, weekSectionWidths, hiddenFeat
         <div className="space-y-5">
           <div className="flex items-center justify-between lg:hidden">
             <h2 className="text-xl font-bold tracking-tight text-[#112849]">This week</h2>
-            <div className="text-xs text-slate-400">Tap a day</div>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectionMode((active) => !active);
+                setSelectedTaskIds([]);
+              }}
+              className={`rounded-full px-3 py-1.5 text-xs font-semibold ${selectionMode ? "bg-[var(--theme-header)] text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}
+            >
+              {selectionMode ? "Done" : "Select"}
+            </button>
           </div>
           <div className="grid grid-cols-7 gap-1.5 lg:hidden">
             {days.map((day) => {
@@ -1762,6 +1948,12 @@ function WeekView({ days, tasks, weekSectionOrder, weekSectionWidths, hiddenFeat
               </div>
               <span className="text-xs text-slate-400">{selectedTasks.filter((task) => task.done).length} / {selectedTasks.length} complete</span>
             </div>
+            {selectionMode && (
+              <div className="mb-2 flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
+                <span className="text-xs font-semibold text-slate-500">{selectedCount} selected</span>
+                <button type="button" onClick={() => setMoveSheetOpen(true)} disabled={!selectedCount} className="rounded-lg bg-[var(--theme-soft)] px-3 py-1.5 text-xs font-semibold text-[var(--theme-accent)] ring-1 ring-[var(--theme-ring)] disabled:bg-slate-100 disabled:text-slate-400 disabled:ring-slate-200">Move selected</button>
+              </div>
+            )}
             <div className="divide-y divide-slate-100">
               {selectedTasks.length ? selectedTasks.map((task) => (
                 <MobileWeekTask
@@ -1776,6 +1968,9 @@ function WeekView({ days, tasks, weekSectionOrder, weekSectionWidths, hiddenFeat
                   onMoveTask={onMoveTask}
                   onMoveTomorrow={onMoveTomorrow}
                   onMoveTomorrowPenalty={onMoveTomorrowPenalty}
+                  selectionMode={selectionMode}
+                  selected={selectedTaskIds.includes(task.id)}
+                  onSelect={toggleSelectedTask}
                   themeColor={themeColor}
                 />
               )) : <div className="p-5 text-center text-sm text-slate-400">No tasks planned.</div>}
@@ -1786,7 +1981,21 @@ function WeekView({ days, tasks, weekSectionOrder, weekSectionWidths, hiddenFeat
           </div>
           <div className="hidden items-center justify-between lg:flex">
             <h2 className="text-xl font-bold tracking-tight text-[#112849]">This week</h2>
-            <div className="text-xs text-slate-400">Drag tasks between days</div>
+            <div className="flex items-center gap-2">
+              {selectionMode && <span className="text-xs font-semibold text-slate-400">{selectedCount} selected</span>}
+              {selectionMode && <button type="button" onClick={() => setMoveSheetOpen(true)} disabled={!selectedCount} className="rounded-full bg-[var(--theme-soft)] px-3 py-1.5 text-xs font-semibold text-[var(--theme-accent)] ring-1 ring-[var(--theme-ring)] disabled:bg-slate-100 disabled:text-slate-400 disabled:ring-slate-200">Move to date</button>}
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectionMode((active) => !active);
+                  setSelectedTaskIds([]);
+                }}
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold ${selectionMode ? "bg-[var(--theme-header)] text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}
+              >
+                {selectionMode ? "Done selecting" : "Select tasks"}
+              </button>
+              <div className="text-xs text-slate-400">{selectionMode ? "Drag one selected task to move the group" : "Drag tasks between days"}</div>
+            </div>
           </div>
           <div className="hidden lg:mx-0 lg:grid lg:gap-3 lg:overflow-visible lg:px-0" style={{ gridTemplateColumns: desktopWeekColumns }}>
             {days.map((day) => (
@@ -1802,8 +2011,11 @@ function WeekView({ days, tasks, weekSectionOrder, weekSectionWidths, hiddenFeat
                   onReframe={onReframe}
                   onMoveTomorrow={onMoveTomorrow}
                   onMoveTomorrowPenalty={onMoveTomorrowPenalty}
-                  onDropTask={(taskId, date) => onMoveTask(taskId, date)}
+                  onDropTask={dropTasks}
                   onDragTask={dragTask}
+                  selectionMode={selectionMode}
+                  selectedTaskIds={selectedTaskIds}
+                  onSelectTask={toggleSelectedTask}
                   today={today}
                   themeColor={themeColor}
                 />
@@ -1863,6 +2075,7 @@ function WeekView({ days, tasks, weekSectionOrder, weekSectionWidths, hiddenFeat
           </TodaySection>
         ))}
       </div>
+      <MoveTasksSheet open={moveSheetOpen} count={selectedCount} initialDate={selectedDay} onClose={() => setMoveSheetOpen(false)} onMove={finishMoveSelected} />
     </motion.div>
   );
 }
@@ -2233,10 +2446,10 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
                 <label><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Day</span><select value={date} onChange={(e) => setDate(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none">{!days.some((day) => isoDate(day) === date) && <option value={date}>{new Date(`${date}T00:00:00`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}</option>}{days.map((day) => <option key={isoDate(day)} value={isoDate(day)}>{pretty(day, { weekday: "short", day: "numeric", month: "short" })}</option>)}</select><button type="button" onClick={() => setDatePickerOpen((open) => !open)} className="mt-2 rounded-lg bg-slate-50 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200">Not This Week?</button></label>
               </div>
               {datePickerOpen && (
-                <label className="block rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-200/70">
-                  <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Choose another date</span>
-                  <input type="date" value={date} onChange={(event) => setDate(event.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-[var(--theme-accent)]" />
-                </label>
+                <div className="rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-200/70">
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Choose another date</div>
+                  <MiniCalendar value={date} onChange={setDate} />
+                </div>
               )}
               <label className="block"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Notes</span><textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="Useful context, booking reference, what to ask..." className="w-full resize-none rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[var(--theme-accent)]" /></label>
               <label className="block"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Website</span><input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="example.com" className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[var(--theme-accent)]" /></label>
@@ -2687,6 +2900,20 @@ export default function ADHDeedsApp() {
       }),
     }));
   }
+  function moveTasks(ids, date) {
+    const uniqueIds = [...new Set((ids || []).filter(Boolean))];
+    if (!uniqueIds.length || !date) return;
+    const firstTask = data.tasks.find((task) => task.id === uniqueIds[0]);
+    if (firstTask) {
+      setRescheduleAdvice(`${uniqueIds.length} task${uniqueIds.length === 1 ? "" : "s"} moved to ${pretty(new Date(`${date}T00:00:00`), { weekday: "long", day: "numeric", month: "short" })}.`);
+    }
+    setData((old) => ({
+      ...old,
+      tasks: old.tasks.map((task) => uniqueIds.includes(task.id)
+        ? { ...task, date, movedCount: (task.movedCount || 0) + (task.date === date ? 0 : 1) }
+        : task),
+    }));
+  }
   function moveTaskToTomorrow(id, penalize = false) {
     const task = data.tasks.find((item) => item.id === id);
     if (!task) return;
@@ -2918,8 +3145,8 @@ export default function ADHDeedsApp() {
             <button key={tab.id} onClick={() => setView(tab.id)} className={`rounded-full px-5 py-2.5 text-sm font-semibold ${view === tab.id ? "bg-[var(--theme-header)] text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>{tab.label}</button>
           ))}
         </div>
-        {view === "today" && <TodayView today={today} selectedDate={selectedTodayDate} tasks={weekTasks} habits={data.habits} brainDump={data.brainDump || []} categories={categories} profile={profile} hiddenFeatures={hiddenFeatures} enabledFeatures={enabledFeatures} weatherLocation={data.ui?.weatherLocation || null} aiAccessToken={session?.access_token} themeColor={selectedThemeColors.header} todaySectionOrder={todaySectionOrder} todaySectionWidths={todaySectionWidths} onPreviousDay={() => moveTodayDate(-1)} onNextDay={() => moveTodayDate(1)} onJumpToday={() => setTodayDate(new Date())} onReorderSection={reorderTodaySection} onToggleTask={toggleTask} onToggleChecklistItem={toggleChecklistItem} onToggleHabit={toggleHabit} onEditTask={openEditTask} onRemoveTask={removeTask} onAddTask={openAddTask} onAddBrainDumpItems={addBrainDumpItems} onRemoveBrainDumpItem={removeBrainDumpItem} onConvertBrainDumpItem={convertBrainDumpItem} onAddCategory={() => setCategorySheetOpen(true)} onReframeTask={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} nudges={categoryNudges} points={points} progress={todayProgress} />}
-        {view === "week" && <WeekView days={days} tasks={weekTasks} weekSectionOrder={weekSectionOrder} weekSectionWidths={weekSectionWidths} hiddenFeatures={hiddenFeatures} themeColor={selectedThemeColors.header} onReorderSection={reorderWeekSection} onToggle={toggleTask} onToggleChecklistItem={toggleChecklistItem} onRemove={removeTask} onEdit={openEditTask} onAddTask={openAddTask} onReframe={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} onMoveTask={moveTask} today={today} points={points} taskPoints={taskPoints} habitPoints={habitPoints} nudges={categoryNudges} />}
+        {view === "today" && <TodayView today={today} selectedDate={selectedTodayDate} tasks={weekTasks} habits={data.habits} brainDump={data.brainDump || []} categories={categories} profile={profile} hiddenFeatures={hiddenFeatures} enabledFeatures={enabledFeatures} weatherLocation={data.ui?.weatherLocation || null} aiAccessToken={session?.access_token} themeColor={selectedThemeColors.header} todaySectionOrder={todaySectionOrder} todaySectionWidths={todaySectionWidths} onPreviousDay={() => moveTodayDate(-1)} onNextDay={() => moveTodayDate(1)} onJumpToday={() => setTodayDate(new Date())} onReorderSection={reorderTodaySection} onToggleTask={toggleTask} onToggleChecklistItem={toggleChecklistItem} onToggleHabit={toggleHabit} onEditTask={openEditTask} onRemoveTask={removeTask} onAddTask={openAddTask} onAddBrainDumpItems={addBrainDumpItems} onRemoveBrainDumpItem={removeBrainDumpItem} onConvertBrainDumpItem={convertBrainDumpItem} onAddCategory={() => setCategorySheetOpen(true)} onReframeTask={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} onMoveTasks={moveTasks} nudges={categoryNudges} points={points} progress={todayProgress} />}
+        {view === "week" && <WeekView days={days} tasks={weekTasks} weekSectionOrder={weekSectionOrder} weekSectionWidths={weekSectionWidths} hiddenFeatures={hiddenFeatures} themeColor={selectedThemeColors.header} onReorderSection={reorderWeekSection} onToggle={toggleTask} onToggleChecklistItem={toggleChecklistItem} onRemove={removeTask} onEdit={openEditTask} onAddTask={openAddTask} onReframe={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} onMoveTask={moveTask} onMoveTasks={moveTasks} today={today} points={points} taskPoints={taskPoints} habitPoints={habitPoints} nudges={categoryNudges} />}
         {view === "dumpster" && <BrainDumpsterView items={data.brainDump || []} categories={categories} onAddItems={addBrainDumpItems} onRemoveItem={removeBrainDumpItem} onConvertItem={convertBrainDumpItem} onAddCategory={() => setCategorySheetOpen(true)} />}
         {view === "habits" && <HabitsView days={days} habits={data.habits} onToggle={toggleHabit} onAdd={openAddHabit} onEdit={openEditHabit} onRemove={removeHabit} />}
         {view === "tasks" && <AllTasksView tasks={weekTasks} categories={categories} onAddCategory={() => setCategorySheetOpen(true)} onReorderCategory={reorderCategory} onToggle={toggleTask} onToggleChecklistItem={toggleChecklistItem} onRemove={removeTask} onAdd={openAddTask} onEdit={openEditTask} onReframe={openReframeTask} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} />}
