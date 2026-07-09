@@ -203,7 +203,7 @@ function previewSectionLayout(currentOrder, currentWidths, sourceId, targetId, p
   return { order, widths: normalizeLayoutWidths(order, widths, allowSplit) };
 }
 function isInteractiveTarget(target) {
-  return !!target.closest("button, a, input, textarea, select, label, [role='button']");
+  return !!target.closest("button, a, input, textarea, select, label, [role='button'], [data-no-layout-drag]");
 }
 function placementFromPoint(element, clientX, clientY, allowSplit = true) {
   const rect = element.getBoundingClientRect();
@@ -756,6 +756,7 @@ function TaskRow({ task, allTasks = [], relianceEnabled = false, linkedMode = "n
   return (
     <motion.div
       layout
+      data-no-layout-drag
       className="relative rounded-xl"
     >
       <div className="absolute inset-x-0 top-0 flex h-full max-h-28 items-center justify-between overflow-hidden rounded-xl bg-slate-100">
