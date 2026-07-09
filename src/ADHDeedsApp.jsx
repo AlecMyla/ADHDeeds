@@ -93,6 +93,7 @@ const FEATURE_OPTIONS = [
 ];
 const BETA_FEATURE_OPTIONS = [
   { id: "todaysConsiderations", label: "Today's Considerations", beta: true },
+  { id: "taskReliance", label: "Task Reliance", beta: true },
 ];
 const THEME_OPTIONS = [
   { id: "blue", label: "Blue", accent: "#3577DE", header: "#112849", soft: "#EFF6FF", ring: "#BFDBFE" },
@@ -326,13 +327,27 @@ function normalizeWeatherLocation(raw) {
     longitude,
   };
 }
+function normalizeRelianceIds(value) {
+  return Array.isArray(value) ? [...new Set(value.filter(Boolean).map(String))].slice(0, 8) : [];
+}
+function normalizeTask(task) {
+  return {
+    ...task,
+    checklist: normalizeChecklist(task.checklist),
+    dependsOn: normalizeRelianceIds(task.dependsOn),
+    requiredFor: normalizeRelianceIds(task.requiredFor),
+  };
+}
+function totalRelianceLinks(task) {
+  return normalizeRelianceIds(task?.dependsOn).length + normalizeRelianceIds(task?.requiredFor).length;
+}
 function normalizeData(raw) {
   const fallback = seedData();
   if (!raw || typeof raw !== "object") return fallback;
   const tasks = Array.isArray(raw.tasks)
     ? raw.tasks
       .filter((task) => !LEGACY_SAMPLE_TASK_NAMES.has(task.name))
-      .map((task) => ({ ...task, checklist: normalizeChecklist(task.checklist) }))
+      .map(normalizeTask)
     : [];
   const habits = Array.isArray(raw.habits)
     ? raw.habits.filter((habit) => !LEGACY_SAMPLE_HABIT_IDS.has(habit.id) && !LEGACY_SAMPLE_HABIT_NAMES.has(habit.name))
@@ -349,7 +364,7 @@ function normalizeData(raw) {
   const recurringTasks = Array.isArray(raw.recurringTasks)
     ? raw.recurringTasks
       .filter((item) => item?.id && item?.frequency && item?.startDate)
-      .map((item) => ({ ...item, checklist: normalizeChecklist(item.checklist) }))
+      .map((item) => ({ ...normalizeTask(item), frequency: item.frequency, startDate: item.startDate }))
     : [];
   const todayOrder = Array.isArray(raw.ui?.todayOrder)
     ? [...raw.ui.todayOrder.filter((item) => TODAY_SECTION_ORDER.includes(item)), ...TODAY_SECTION_ORDER].filter((item, index, list) => list.indexOf(item) === index)
@@ -399,6 +414,57 @@ function loadData() {
   } catch {
     return seedData();
   }
+}
+
+function addUniqueLimited(list, id) {
+  return [...new Set([...normalizeRelianceIds(list), id].filter(Boolean))].slice(0, 8);
+}
+function withoutRelianceId(list, id) {
+  return normalizeRelianceIds(list).filter((item) => item !== id);
+}
+function applyRelianceLink(tasks, sourceId, targetId, type) {
+  if (!sourceId || !targetId || sourceId === targetId) return tasks;
+  return tasks.map((task) => {
+    if (task.id === sourceId) {
+      return type === "dependsOn"
+        ? { ...task, dependsOn: addUniqueLimited(task.dependsOn, targetId) }
+        : { ...task, requiredFor: addUniqueLimited(task.requiredFor, targetId) };
+    }
+    if (task.id === targetId) {
+      return type === "dependsOn"
+        ? { ...task, requiredFor: addUniqueLimited(task.requiredFor, sourceId) }
+        : { ...task, dependsOn: addUniqueLimited(task.dependsOn, sourceId) };
+    }
+    return task;
+  });
+}
+function syncRelianceForTask(tasks, taskId) {
+  const current = tasks.find((task) => task.id === taskId);
+  if (!current) return tasks;
+  let next = tasks.map((task) => {
+    if (task.id === taskId) return normalizeTask(task);
+    return {
+      ...task,
+      dependsOn: withoutRelianceId(task.dependsOn, taskId),
+      requiredFor: withoutRelianceId(task.requiredFor, taskId),
+    };
+  });
+  normalizeRelianceIds(current.dependsOn).forEach((id) => {
+    next = applyRelianceLink(next, taskId, id, "dependsOn");
+  });
+  normalizeRelianceIds(current.requiredFor).forEach((id) => {
+    next = applyRelianceLink(next, taskId, id, "requiredFor");
+  });
+  return next;
+}
+function unlinkTaskFromReliance(tasks, taskId) {
+  return tasks
+    .filter((task) => task.id !== taskId)
+    .map((task) => ({
+      ...task,
+      dependsOn: withoutRelianceId(task.dependsOn, taskId),
+      requiredFor: withoutRelianceId(task.requiredFor, taskId),
+    }));
 }
 
 function sortPriority(tasks) {
@@ -566,7 +632,7 @@ function MoveTasksSheet({ open, count, initialDate, onClose, onMove }) {
   );
 }
 
-function TaskRow({ task, onToggle, onToggleChecklistItem, onRemove, onEdit, onReframe, onMoveTomorrow, onMoveTomorrowPenalty, onDragStart, selectable = false, selected = false, onSelect, compact = false, showWebsite = false, themeColor }) {
+function TaskRow({ task, allTasks = [], relianceEnabled = false, linkedMode = "navigate", onOpenLinkedTask, onToggleLinkedTask, onToggle, onToggleChecklistItem, onRemove, onEdit, onReframe, onMoveTomorrow, onMoveTomorrowPenalty, onDragStart, selectable = false, selected = false, onSelect, compact = false, showWebsite = false, themeColor }) {
   const [noteOpen, setNoteOpen] = useState(false);
   const [notePosition, setNotePosition] = useState({ left: 0, top: 0 });
   const [checklistOpen, setChecklistOpen] = useState(false);
@@ -579,6 +645,12 @@ function TaskRow({ task, onToggle, onToggleChecklistItem, onRemove, onEdit, onRe
   const listStats = checklistStats(task);
   const hasChecklist = listStats.total > 0;
   const checklistComplete = !hasChecklist || listStats.done === listStats.total;
+  const linkedTasks = relianceEnabled
+    ? [
+      ...normalizeRelianceIds(task.dependsOn).map((id) => ({ type: "Depends on", task: allTasks.find((item) => item.id === id) })).filter((item) => item.task),
+      ...normalizeRelianceIds(task.requiredFor).map((id) => ({ type: "Required for", task: allTasks.find((item) => item.id === id) })).filter((item) => item.task),
+    ]
+    : [];
   function openNote(anchor) {
     const rect = anchor.getBoundingClientRect();
     const width = Math.min(280, window.innerWidth - 24);
@@ -787,6 +859,31 @@ function TaskRow({ task, onToggle, onToggleChecklistItem, onRemove, onEdit, onRe
         </div>
       ), document.body)}
     </motion.div>
+    {!!linkedTasks.length && (
+      <div className={`space-y-1.5 bg-white ${compact ? "px-2 pb-2" : "px-3 pb-3"}`}>
+        {linkedTasks.map(({ type, task: linked }) => {
+          const linkedStats = checklistStats(linked);
+          const canComplete = linkedMode === "complete" && (linked.done || linkedStats.total === 0 || linkedStats.done === linkedStats.total);
+          return (
+            <button
+              type="button"
+              key={`${type}-${linked.id}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                if (linkedMode === "complete" && canComplete) onToggleLinkedTask?.(linked.id);
+                else onOpenLinkedTask?.(linked);
+              }}
+              className="ml-8 flex w-[calc(100%-2rem)] items-center gap-2 rounded-xl border border-dashed border-[var(--theme-ring)] bg-[var(--theme-soft)] px-3 py-2 text-left text-xs text-[#112849] hover:border-[var(--theme-accent)]"
+              title={linkedMode === "complete" ? "Click to complete linked task when allowed" : "Open linked task"}
+            >
+              <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[var(--theme-accent)]">{type}</span>
+              <span className={`min-w-0 flex-1 truncate font-semibold ${linked.done ? "text-slate-400 line-through" : ""}`}>{linked.name}</span>
+              <span className="shrink-0 text-[10px] font-semibold text-slate-400">{pretty(new Date(`${linked.date}T00:00:00`), { day: "numeric", month: "short" })}</span>
+            </button>
+          );
+        })}
+      </div>
+    )}
     </motion.div>
   );
 }
@@ -1530,7 +1627,7 @@ function TodaySection({ id, children, onMove, onPreview, onClearPreview, onPoint
   );
 }
 
-function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, profile, hiddenFeatures, enabledFeatures, weatherLocation, aiAccessToken, themeColor, todaySectionOrder, todaySectionWidths, onPreviousDay, onNextDay, onJumpToday, onReorderSection, onToggleTask, onToggleChecklistItem, onToggleHabit, onEditTask, onRemoveTask, onAddTask, onAddBrainDumpItems, onRemoveBrainDumpItem, onConvertBrainDumpItem, onAddCategory, onReframeTask, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, onMoveTasks, nudges, points, progress }) {
+function TodayView({ today, selectedDate, tasks, allTasks, habits, brainDump, categories, profile, hiddenFeatures, enabledFeatures, weatherLocation, aiAccessToken, themeColor, todaySectionOrder, todaySectionWidths, onPreviousDay, onNextDay, onJumpToday, onReorderSection, onToggleTask, onToggleChecklistItem, onToggleHabit, onEditTask, onOpenLinkedTask, onRemoveTask, onAddTask, onAddBrainDumpItems, onRemoveBrainDumpItem, onConvertBrainDumpItem, onAddCategory, onReframeTask, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, onMoveTasks, nudges, points, progress }) {
   const selectedKey = isoDate(selectedDate);
   const todayKey = isoDate(today);
   const isToday = selectedKey === todayKey;
@@ -1595,6 +1692,9 @@ function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, 
               <TaskRow
                 key={task.id}
                 task={task}
+                allTasks={allTasks}
+                relianceEnabled={enabledFeatures.includes("taskReliance")}
+                onOpenLinkedTask={onOpenLinkedTask}
                 onToggle={onToggleTask}
                 onToggleChecklistItem={onToggleChecklistItem}
                 onRemove={onRemoveTask}
@@ -1730,7 +1830,7 @@ function TodayView({ today, selectedDate, tasks, habits, brainDump, categories, 
   );
 }
 
-function DayCard({ day, tasks, onToggle, onToggleChecklistItem, onRemove, onEdit, onAddTask, onReframe, onMoveTomorrow, onMoveTomorrowPenalty, onDropTask, onDragTask, selectionMode = false, selectedTaskIds = [], onSelectTask, today, themeColor }) {
+function DayCard({ day, tasks, allTasks, relianceEnabled, onToggle, onToggleChecklistItem, onRemove, onEdit, onOpenLinkedTask, onAddTask, onReframe, onMoveTomorrow, onMoveTomorrowPenalty, onDropTask, onDragTask, selectionMode = false, selectedTaskIds = [], onSelectTask, today, themeColor }) {
   const [dragOver, setDragOver] = useState(false);
   const completed = tasks.filter((t) => t.done).length;
   const pct = tasks.length ? Math.round((completed / tasks.length) * 100) : 0;
@@ -1763,6 +1863,9 @@ function DayCard({ day, tasks, onToggle, onToggleChecklistItem, onRemove, onEdit
               key={task.id}
               compact
               task={task}
+              allTasks={allTasks}
+              relianceEnabled={relianceEnabled}
+              onOpenLinkedTask={onOpenLinkedTask}
               onToggle={onToggle}
               onToggleChecklistItem={onToggleChecklistItem}
               onRemove={onRemove}
@@ -1786,13 +1889,16 @@ function DayCard({ day, tasks, onToggle, onToggleChecklistItem, onRemove, onEdit
   );
 }
 
-function MobileWeekTask({ task, days, onToggle, onToggleChecklistItem, onRemove, onEdit, onReframe, onMoveTask, onMoveTomorrow, onMoveTomorrowPenalty, selectionMode = false, selected = false, onSelect, themeColor }) {
+function MobileWeekTask({ task, days, allTasks, relianceEnabled, onToggle, onToggleChecklistItem, onRemove, onEdit, onOpenLinkedTask, onReframe, onMoveTask, onMoveTomorrow, onMoveTomorrowPenalty, selectionMode = false, selected = false, onSelect, themeColor }) {
   const [moving, setMoving] = useState(false);
 
   return (
     <div>
       <TaskRow
         task={task}
+        allTasks={allTasks}
+        relianceEnabled={relianceEnabled}
+        onOpenLinkedTask={onOpenLinkedTask}
         onToggle={onToggle}
         onToggleChecklistItem={onToggleChecklistItem}
         onRemove={onRemove}
@@ -1836,7 +1942,7 @@ function MobileWeekTask({ task, days, onToggle, onToggleChecklistItem, onRemove,
   );
 }
 
-function WeekView({ days, tasks, weekSectionOrder, weekSectionWidths, hiddenFeatures, themeColor, onReorderSection, onToggle, onToggleChecklistItem, onRemove, onEdit, onAddTask, onReframe, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, onMoveTask, onMoveTasks, today, points, taskPoints, habitPoints, nudges }) {
+function WeekView({ days, tasks, allTasks, weekSectionOrder, weekSectionWidths, hiddenFeatures, enabledFeatures, themeColor, onReorderSection, onToggle, onToggleChecklistItem, onRemove, onEdit, onOpenLinkedTask, onAddTask, onReframe, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, onMoveTask, onMoveTasks, today, points, taskPoints, habitPoints, nudges }) {
   const initialDay = days.find((day) => isoDate(day) === isoDate(today)) || days[0];
   const [selectedDay, setSelectedDay] = useState(isoDate(initialDay));
   const [layoutPreview, setLayoutPreview] = useState(null);
@@ -1848,6 +1954,7 @@ function WeekView({ days, tasks, weekSectionOrder, weekSectionWidths, hiddenFeat
   const done = tasks.filter((t) => t.done).length;
   const selectedDate = days.find((day) => isoDate(day) === selectedDay) || days[0];
   const selectedTasks = tasks.filter((task) => task.date === selectedDay);
+  const relianceEnabled = enabledFeatures.includes("taskReliance");
   const selectedCount = selectedTaskIds.length;
   useEffect(() => {
     setSelectedTaskIds((ids) => ids.filter((id) => tasks.some((task) => task.id === id)));
@@ -1960,10 +2067,13 @@ function WeekView({ days, tasks, weekSectionOrder, weekSectionWidths, hiddenFeat
                   key={task.id}
                   task={task}
                   days={days}
+                  allTasks={allTasks}
+                  relianceEnabled={relianceEnabled}
                   onToggle={onToggle}
                   onToggleChecklistItem={onToggleChecklistItem}
                   onRemove={onRemove}
                   onEdit={onEdit}
+                  onOpenLinkedTask={onOpenLinkedTask}
                   onReframe={onReframe}
                   onMoveTask={onMoveTask}
                   onMoveTomorrow={onMoveTomorrow}
@@ -2003,10 +2113,13 @@ function WeekView({ days, tasks, weekSectionOrder, weekSectionWidths, hiddenFeat
                 <DayCard
                   day={day}
                   tasks={tasks.filter((t) => t.date === isoDate(day))}
+                  allTasks={allTasks}
+                  relianceEnabled={relianceEnabled}
                   onToggle={onToggle}
                   onToggleChecklistItem={onToggleChecklistItem}
                   onRemove={onRemove}
                   onEdit={onEdit}
+                  onOpenLinkedTask={onOpenLinkedTask}
                   onAddTask={onAddTask}
                   onReframe={onReframe}
                   onMoveTomorrow={onMoveTomorrow}
@@ -2197,7 +2310,7 @@ function BrainDumpsterView({ items, categories, onAddItems, onRemoveItem, onConv
   );
 }
 
-function AllTasksView({ tasks, categories, onAddCategory, onReorderCategory, onToggle, onToggleChecklistItem, onRemove, onAdd, onEdit, onReframe, onMoveTomorrow, onMoveTomorrowPenalty }) {
+function AllTasksView({ tasks, allTasks, categories, relianceEnabled, onAddCategory, onReorderCategory, onToggle, onToggleChecklistItem, onRemove, onAdd, onEdit, onReframe, onMoveTomorrow, onMoveTomorrowPenalty }) {
   const [filter, setFilter] = useState("All");
   const [showRecurring, setShowRecurring] = useState(true);
   const [categoryDragOver, setCategoryDragOver] = useState("");
@@ -2256,7 +2369,7 @@ function AllTasksView({ tasks, categories, onAddCategory, onReorderCategory, onT
         {sortedTasks.map((task) => (
           <div key={task.id} className="border-b border-slate-100 last:border-b-0">
             <div className="px-3 pt-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400">{new Date(task.date + "T00:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" })}</div>
-            <TaskRow task={task} onToggle={onToggle} onToggleChecklistItem={onToggleChecklistItem} onRemove={onRemove} onEdit={onEdit} onReframe={onReframe} onMoveTomorrow={onMoveTomorrow} onMoveTomorrowPenalty={onMoveTomorrowPenalty} />
+            <TaskRow task={task} allTasks={allTasks} relianceEnabled={relianceEnabled} linkedMode="complete" onToggleLinkedTask={onToggle} onOpenLinkedTask={onEdit} onToggle={onToggle} onToggleChecklistItem={onToggleChecklistItem} onRemove={onRemove} onEdit={onEdit} onReframe={onReframe} onMoveTomorrow={onMoveTomorrow} onMoveTomorrowPenalty={onMoveTomorrowPenalty} />
           </div>
         ))}
         {!visible.length && <div className="p-8 text-center text-sm text-slate-400">No tasks here.</div>}
@@ -2265,7 +2378,7 @@ function AllTasksView({ tasks, categories, onAddCategory, onReorderCategory, onT
   );
 }
 
-function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate, initialName = "", categories, profile, onAddCategory, aiAccessToken }) {
+function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate, initialName = "", categories, profile, allTasks = [], taskRelianceEnabled, pendingReliance, onAddCategory, aiAccessToken }) {
   const [name, setName] = useState("");
   const [category, setCategory] = useState(categories[0] || "");
   const [date, setDate] = useState(isoDate(days[0]));
@@ -2280,6 +2393,11 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
   const [checklist, setChecklist] = useState([]);
   const [checklistStatus, setChecklistStatus] = useState("");
   const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const [dependsOn, setDependsOn] = useState([]);
+  const [requiredFor, setRequiredFor] = useState([]);
+  const [relianceMode, setRelianceMode] = useState("dependsOn");
+  const [relianceSearch, setRelianceSearch] = useState("");
+  const [reliancePickerOpen, setReliancePickerOpen] = useState(false);
   useEffect(() => {
     if (!open) return;
     setName(task?.name || initialName);
@@ -2296,22 +2414,76 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
     setChecklist(savedChecklist);
     setChecklistOpen(!!savedChecklist.length);
     setChecklistStatus("");
+    const seededDependsOn = normalizeRelianceIds(task?.dependsOn);
+    const seededRequiredFor = normalizeRelianceIds(task?.requiredFor);
+    if (!task && pendingReliance?.sourceTaskId) {
+      if (pendingReliance.type === "dependsOn") {
+        setDependsOn([]);
+        setRequiredFor(addUniqueLimited(seededRequiredFor, pendingReliance.sourceTaskId));
+      } else {
+        setDependsOn(addUniqueLimited(seededDependsOn, pendingReliance.sourceTaskId));
+        setRequiredFor([]);
+      }
+    } else {
+      setDependsOn(seededDependsOn);
+      setRequiredFor(seededRequiredFor);
+    }
+    setRelianceMode("dependsOn");
+    setRelianceSearch("");
+    setReliancePickerOpen(false);
     setDatePickerOpen(false);
-  }, [open, days, task, initialDate, initialName, categories]);
+  }, [open, days, task, initialDate, initialName, categories, pendingReliance]);
   useEffect(() => {
     if (open && !category && categories.length) setCategory(categories[0]);
   }, [open, category, categories]);
-  function submit(event) {
-    event.preventDefault();
+  function payloadForSubmit() {
     if (!name.trim()) return;
     const cleanChecklist = normalizeChecklist(checklist);
+    const base = {
+      name: name.trim(),
+      category,
+      date,
+      points,
+      important,
+      notes: notes.trim(),
+      website: normalizeWebsite(website),
+      checklist: cleanChecklist,
+      dependsOn,
+      requiredFor,
+    };
     if (task) {
       const nextDone = cleanChecklist.length && cleanChecklist.some((item) => !item.done) ? false : task.done;
-      onUpdate({ ...task, name: name.trim(), category, date, points, important, notes: notes.trim(), website: normalizeWebsite(website), checklist: cleanChecklist, done: nextDone });
-    } else {
-      onSave({ id: `task-${Date.now()}`, name: name.trim(), category, date, points, done: false, important, notes: notes.trim(), website: normalizeWebsite(website), checklist: cleanChecklist, recurrence });
+      return { ...task, ...base, done: nextDone };
     }
-    setName(""); setCategory(categories[0] || ""); setPoints(10); setImportant(false); setNotes(""); setWebsite(""); setRecurrence("none"); setBreakdown([]); setBreakdownStatus(""); setChecklist([]); setChecklistOpen(false); setChecklistStatus(""); setDatePickerOpen(false); onClose();
+    return { id: `task-${Date.now()}`, ...base, done: false, recurrence };
+  }
+  function resetFormAndClose() {
+    setName(""); setCategory(categories[0] || ""); setPoints(10); setImportant(false); setNotes(""); setWebsite(""); setRecurrence("none"); setBreakdown([]); setBreakdownStatus(""); setChecklist([]); setChecklistOpen(false); setChecklistStatus(""); setDependsOn([]); setRequiredFor([]); setRelianceSearch(""); setReliancePickerOpen(false); setDatePickerOpen(false); onClose();
+  }
+  function submit(event) {
+    event.preventDefault();
+    const payload = payloadForSubmit();
+    if (!payload) return;
+    if (task) onUpdate(payload);
+    else onSave(payload);
+    resetFormAndClose();
+  }
+  function saveAndCreateLinkedTask(type) {
+    const payload = payloadForSubmit();
+    if (!payload) return;
+    if (task) onUpdate(payload, { createLinkedType: type });
+    else onSave(payload, { createLinkedType: type });
+    resetFormAndClose();
+  }
+  function addExistingReliance(id) {
+    if (!id || id === task?.id || dependsOn.includes(id) || requiredFor.includes(id) || totalRelianceLinks({ dependsOn, requiredFor }) >= 8) return;
+    if (relianceMode === "dependsOn") setDependsOn((items) => addUniqueLimited(items, id));
+    else setRequiredFor((items) => addUniqueLimited(items, id));
+    setRelianceSearch("");
+  }
+  function removeReliance(id, type) {
+    if (type === "dependsOn") setDependsOn((items) => withoutRelianceId(items, id));
+    else setRequiredFor((items) => withoutRelianceId(items, id));
   }
   async function createBreakdown() {
     if (!name.trim()) return;
@@ -2449,6 +2621,56 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
                 <div className="rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-200/70">
                   <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Choose another date</div>
                   <MiniCalendar value={date} onChange={setDate} />
+                </div>
+              )}
+              {taskRelianceEnabled && (
+                <div className="rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-200/70">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-bold text-[#112849]">Task Reliance</div>
+                      <p className="mt-1 text-xs text-slate-400">Link up to 8 tasks that depend on each other.</p>
+                    </div>
+                    <span className="rounded-full bg-white px-2 py-1 text-[10px] font-bold text-slate-400 ring-1 ring-slate-200">{totalRelianceLinks({ dependsOn, requiredFor })}/8</span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    {[{ id: "dependsOn", label: "Depends On" }, { id: "requiredFor", label: "Required For" }].map((option) => (
+                      <button type="button" key={option.id} onClick={() => setRelianceMode(option.id)} className={`rounded-xl px-3 py-2 text-xs font-semibold ring-1 ${relianceMode === option.id ? "bg-[var(--theme-header)] text-white ring-[var(--theme-header)]" : "bg-white text-slate-500 ring-slate-200"}`}>{option.label}</button>
+                    ))}
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    {[...dependsOn.map((id) => ({ id, type: "dependsOn", label: "Depends on" })), ...requiredFor.map((id) => ({ id, type: "requiredFor", label: "Required for" }))].map((link) => {
+                      const linked = allTasks.find((item) => item.id === link.id);
+                      return linked ? (
+                        <div key={`${link.type}-${link.id}`} className="flex items-center gap-2 rounded-xl border border-dashed border-[var(--theme-ring)] bg-white px-3 py-2 text-xs">
+                          <span className="rounded-full bg-[var(--theme-soft)] px-2 py-0.5 font-bold text-[var(--theme-accent)]">{link.label}</span>
+                          <span className="min-w-0 flex-1 truncate font-semibold text-[#112849]">{linked.name}</span>
+                          <button type="button" onClick={() => removeReliance(link.id, link.type)} className="text-slate-400 hover:text-rose-500"><X size={14} /></button>
+                        </div>
+                      ) : null;
+                    })}
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button type="button" onClick={() => setReliancePickerOpen((open) => !open)} disabled={totalRelianceLinks({ dependsOn, requiredFor }) >= 8} className="rounded-xl bg-white py-2.5 text-xs font-semibold text-slate-600 ring-1 ring-slate-200 disabled:text-slate-300">Existing task</button>
+                    <button type="button" onClick={() => saveAndCreateLinkedTask(relianceMode)} disabled={totalRelianceLinks({ dependsOn, requiredFor }) >= 8 || !name.trim() || !category} className="rounded-xl bg-[var(--theme-soft)] py-2.5 text-xs font-semibold text-[var(--theme-accent)] ring-1 ring-[var(--theme-ring)] disabled:bg-slate-100 disabled:text-slate-300 disabled:ring-slate-200">New task</button>
+                  </div>
+                  {reliancePickerOpen && (
+                    <div className="mt-3 rounded-xl bg-white p-2 ring-1 ring-slate-200">
+                      <input value={relianceSearch} onChange={(event) => setRelianceSearch(event.target.value)} placeholder="Search tasks..." className="mb-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[var(--theme-accent)]" />
+                      <div className="max-h-44 space-y-1 overflow-y-auto">
+                        {allTasks
+                          .filter((item) => item.id !== task?.id && !dependsOn.includes(item.id) && !requiredFor.includes(item.id))
+                          .filter((item) => `${item.name} ${item.category || ""}`.toLowerCase().includes(relianceSearch.toLowerCase()))
+                          .slice(0, 20)
+                          .map((item) => (
+                            <button type="button" key={item.id} onClick={() => addExistingReliance(item.id)} className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left hover:bg-slate-50">
+                              <span className="min-w-0 truncate text-sm font-semibold text-[#112849]">{item.name}</span>
+                              <span className="shrink-0 text-[10px] font-semibold text-slate-400">{pretty(new Date(`${item.date}T00:00:00`), { day: "numeric", month: "short" })}</span>
+                            </button>
+                          ))}
+                        {!allTasks.filter((item) => item.id !== task?.id).length && <div className="p-3 text-center text-xs text-slate-400">No other tasks yet.</div>}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
               <label className="block"><span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Notes</span><textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="Useful context, booking reference, what to ask..." className="w-full resize-none rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[var(--theme-accent)]" /></label>
@@ -2632,6 +2854,7 @@ export default function ADHDeedsApp() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [newTaskDate, setNewTaskDate] = useState(null);
+  const [pendingReliance, setPendingReliance] = useState(null);
   const [brainTaskDraft, setBrainTaskDraft] = useState(null);
   const [habitSheetOpen, setHabitSheetOpen] = useState(false);
   const [editingHabit, setEditingHabit] = useState(null);
@@ -2762,6 +2985,7 @@ export default function ADHDeedsApp() {
   const weekSectionWidths = data.ui?.weekWidths || {};
   const hiddenFeatures = data.ui?.hiddenFeatures || [];
   const enabledFeatures = data.ui?.enabledFeatures || [];
+  const taskRelianceEnabled = enabledFeatures.includes("taskReliance");
   const selectedTheme = THEME_OPTIONS.some((option) => option.id === data.ui?.theme) ? data.ui.theme : DEFAULT_THEME_ID;
   const selectedThemeColors = themeById(selectedTheme);
   const profile = normalizeProfile(data.profile);
@@ -2774,6 +2998,16 @@ export default function ADHDeedsApp() {
   }).filter(Boolean);
 
   function toggleTask(id) {
+    const currentTask = data.tasks.find((task) => task.id === id);
+    if (taskRelianceEnabled && currentTask && !currentTask.done) {
+      const blockers = normalizeRelianceIds(currentTask.dependsOn)
+        .map((linkId) => data.tasks.find((task) => task.id === linkId))
+        .filter((task) => task && !task.done);
+      if (blockers.length) {
+        setRescheduleAdvice(`${currentTask.name} depends on ${blockers[0].name}. Complete that linked task first.`);
+        return;
+      }
+    }
     setData((old) => ({
       ...old,
       tasks: old.tasks.map((task) => {
@@ -2798,66 +3032,103 @@ export default function ADHDeedsApp() {
   function removeTask(id) {
     setData((old) => {
       const task = old.tasks.find((item) => item.id === id);
-      if (!task?.recurringId) return { ...old, tasks: old.tasks.filter((item) => item.id !== id) };
+      if (!task?.recurringId) return { ...old, tasks: unlinkTaskFromReliance(old.tasks, id) };
       return {
         ...old,
-        tasks: old.tasks.filter((item) => item.recurringId !== task.recurringId),
+        tasks: old.tasks
+          .filter((item) => item.recurringId !== task.recurringId)
+          .map((item) => ({
+            ...item,
+            dependsOn: normalizeRelianceIds(item.dependsOn).filter((linkId) => linkId !== id),
+            requiredFor: normalizeRelianceIds(item.requiredFor).filter((linkId) => linkId !== id),
+          })),
         recurringTasks: (old.recurringTasks || []).filter((template) => template.id !== task.recurringId),
       };
     });
   }
-  function addTask(task) {
+  function continueLinkedTaskFlow(savedTask, options) {
+    if (!options?.createLinkedType) {
+      setPendingReliance(null);
+      return;
+    }
+    window.setTimeout(() => {
+      setEditingTask(null);
+      setBrainTaskDraft(null);
+      setPendingReliance({ sourceTaskId: savedTask.id, type: options.createLinkedType });
+      setNewTaskDate(savedTask.date);
+      setSheetOpen(true);
+    }, 0);
+  }
+  function addTask(task, options = {}) {
+    const normalized = normalizeTask(task);
     if (task.recurrence && task.recurrence !== "none") {
       const recurringId = `recurring-${Date.now()}`;
-      const { recurrence, ...taskFields } = task;
+      const { recurrence, ...taskFields } = normalized;
       setData((old) => ({
         ...old,
         recurringTasks: [
           ...(old.recurringTasks || []),
           {
             id: recurringId,
-            name: task.name,
-            category: task.category,
-            startDate: task.date,
+            name: normalized.name,
+            category: normalized.category,
+            startDate: normalized.date,
             frequency: recurrence,
-            points: task.points,
-            important: task.important,
-            notes: task.notes || "",
-            website: task.website || "",
-            checklist: normalizeChecklist(task.checklist),
+            points: normalized.points,
+            important: normalized.important,
+            notes: normalized.notes || "",
+            website: normalized.website || "",
+            checklist: normalizeChecklist(normalized.checklist),
             skippedDates: [],
           },
         ],
         brainDump: brainTaskDraft ? (old.brainDump || []).filter((item) => item.id !== brainTaskDraft.id) : (old.brainDump || []),
-        tasks: [...old.tasks, { ...taskFields, recurringId }],
+        tasks: syncRelianceForTask([...old.tasks, { ...taskFields, recurringId }], normalized.id),
       }));
       setBrainTaskDraft(null);
+      continueLinkedTaskFlow({ ...taskFields, recurringId }, options);
       return;
     }
-    const { recurrence, ...taskFields } = task;
+    const { recurrence, ...taskFields } = normalized;
     setData((old) => ({
       ...old,
       brainDump: brainTaskDraft ? (old.brainDump || []).filter((item) => item.id !== brainTaskDraft.id) : (old.brainDump || []),
-      tasks: [...old.tasks, taskFields],
+      tasks: syncRelianceForTask([...old.tasks, taskFields], taskFields.id),
     }));
     setBrainTaskDraft(null);
+    continueLinkedTaskFlow(taskFields, options);
   }
-  function updateTask(updatedTask) { setData((old) => ({ ...old, tasks: old.tasks.map((task) => task.id === updatedTask.id ? updatedTask : task) })); }
+  function updateTask(updatedTask, options = {}) {
+    const normalized = normalizeTask(updatedTask);
+    setData((old) => ({ ...old, tasks: syncRelianceForTask(old.tasks.map((task) => task.id === normalized.id ? normalized : task), normalized.id) }));
+    continueLinkedTaskFlow(normalized, options);
+  }
   function openAddTask(date = null) {
     setEditingTask(null);
     setBrainTaskDraft(null);
+    setPendingReliance(null);
     setNewTaskDate(date);
     setSheetOpen(true);
   }
   function openEditTask(task) {
     setEditingTask(task);
     setNewTaskDate(null);
+    setPendingReliance(null);
     setSheetOpen(true);
+  }
+  function openLinkedTask(task) {
+    if (!task) return;
+    const date = new Date(`${task.date}T00:00:00`);
+    setActiveWeek(startOfWeek(date));
+    setSelectedTodayDate(date);
+    setView("today");
+    setRescheduleAdvice(`Opened ${task.name}.`);
   }
   function closeSheet() {
     setSheetOpen(false);
     setEditingTask(null);
     setNewTaskDate(null);
+    setPendingReliance(null);
     setBrainTaskDraft(null);
   }
   function addBrainDumpItems(lines) {
@@ -3145,14 +3416,14 @@ export default function ADHDeedsApp() {
             <button key={tab.id} onClick={() => setView(tab.id)} className={`rounded-full px-5 py-2.5 text-sm font-semibold ${view === tab.id ? "bg-[var(--theme-header)] text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>{tab.label}</button>
           ))}
         </div>
-        {view === "today" && <TodayView today={today} selectedDate={selectedTodayDate} tasks={weekTasks} habits={data.habits} brainDump={data.brainDump || []} categories={categories} profile={profile} hiddenFeatures={hiddenFeatures} enabledFeatures={enabledFeatures} weatherLocation={data.ui?.weatherLocation || null} aiAccessToken={session?.access_token} themeColor={selectedThemeColors.header} todaySectionOrder={todaySectionOrder} todaySectionWidths={todaySectionWidths} onPreviousDay={() => moveTodayDate(-1)} onNextDay={() => moveTodayDate(1)} onJumpToday={() => setTodayDate(new Date())} onReorderSection={reorderTodaySection} onToggleTask={toggleTask} onToggleChecklistItem={toggleChecklistItem} onToggleHabit={toggleHabit} onEditTask={openEditTask} onRemoveTask={removeTask} onAddTask={openAddTask} onAddBrainDumpItems={addBrainDumpItems} onRemoveBrainDumpItem={removeBrainDumpItem} onConvertBrainDumpItem={convertBrainDumpItem} onAddCategory={() => setCategorySheetOpen(true)} onReframeTask={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} onMoveTasks={moveTasks} nudges={categoryNudges} points={points} progress={todayProgress} />}
-        {view === "week" && <WeekView days={days} tasks={weekTasks} weekSectionOrder={weekSectionOrder} weekSectionWidths={weekSectionWidths} hiddenFeatures={hiddenFeatures} themeColor={selectedThemeColors.header} onReorderSection={reorderWeekSection} onToggle={toggleTask} onToggleChecklistItem={toggleChecklistItem} onRemove={removeTask} onEdit={openEditTask} onAddTask={openAddTask} onReframe={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} onMoveTask={moveTask} onMoveTasks={moveTasks} today={today} points={points} taskPoints={taskPoints} habitPoints={habitPoints} nudges={categoryNudges} />}
+        {view === "today" && <TodayView today={today} selectedDate={selectedTodayDate} tasks={weekTasks} allTasks={data.tasks} habits={data.habits} brainDump={data.brainDump || []} categories={categories} profile={profile} hiddenFeatures={hiddenFeatures} enabledFeatures={enabledFeatures} weatherLocation={data.ui?.weatherLocation || null} aiAccessToken={session?.access_token} themeColor={selectedThemeColors.header} todaySectionOrder={todaySectionOrder} todaySectionWidths={todaySectionWidths} onPreviousDay={() => moveTodayDate(-1)} onNextDay={() => moveTodayDate(1)} onJumpToday={() => setTodayDate(new Date())} onReorderSection={reorderTodaySection} onToggleTask={toggleTask} onToggleChecklistItem={toggleChecklistItem} onToggleHabit={toggleHabit} onEditTask={openEditTask} onOpenLinkedTask={openLinkedTask} onRemoveTask={removeTask} onAddTask={openAddTask} onAddBrainDumpItems={addBrainDumpItems} onRemoveBrainDumpItem={removeBrainDumpItem} onConvertBrainDumpItem={convertBrainDumpItem} onAddCategory={() => setCategorySheetOpen(true)} onReframeTask={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} onMoveTasks={moveTasks} nudges={categoryNudges} points={points} progress={todayProgress} />}
+        {view === "week" && <WeekView days={days} tasks={weekTasks} allTasks={data.tasks} weekSectionOrder={weekSectionOrder} weekSectionWidths={weekSectionWidths} hiddenFeatures={hiddenFeatures} enabledFeatures={enabledFeatures} themeColor={selectedThemeColors.header} onReorderSection={reorderWeekSection} onToggle={toggleTask} onToggleChecklistItem={toggleChecklistItem} onRemove={removeTask} onEdit={openEditTask} onOpenLinkedTask={openLinkedTask} onAddTask={openAddTask} onReframe={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} onMoveTask={moveTask} onMoveTasks={moveTasks} today={today} points={points} taskPoints={taskPoints} habitPoints={habitPoints} nudges={categoryNudges} />}
         {view === "dumpster" && <BrainDumpsterView items={data.brainDump || []} categories={categories} onAddItems={addBrainDumpItems} onRemoveItem={removeBrainDumpItem} onConvertItem={convertBrainDumpItem} onAddCategory={() => setCategorySheetOpen(true)} />}
         {view === "habits" && <HabitsView days={days} habits={data.habits} onToggle={toggleHabit} onAdd={openAddHabit} onEdit={openEditHabit} onRemove={removeHabit} />}
-        {view === "tasks" && <AllTasksView tasks={weekTasks} categories={categories} onAddCategory={() => setCategorySheetOpen(true)} onReorderCategory={reorderCategory} onToggle={toggleTask} onToggleChecklistItem={toggleChecklistItem} onRemove={removeTask} onAdd={openAddTask} onEdit={openEditTask} onReframe={openReframeTask} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} />}
+        {view === "tasks" && <AllTasksView tasks={weekTasks} allTasks={data.tasks} categories={categories} relianceEnabled={taskRelianceEnabled} onAddCategory={() => setCategorySheetOpen(true)} onReorderCategory={reorderCategory} onToggle={toggleTask} onToggleChecklistItem={toggleChecklistItem} onRemove={removeTask} onAdd={openAddTask} onEdit={openEditTask} onReframe={openReframeTask} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} />}
       </main>
       <BottomNav view={view} setView={setView} />
-      <AddTaskSheet open={sheetOpen} onClose={closeSheet} onSave={addTask} onUpdate={updateTask} days={days} task={editingTask} initialDate={newTaskDate} initialName={brainTaskDraft?.text || ""} categories={categories} profile={profile} onAddCategory={() => setCategorySheetOpen(true)} aiAccessToken={session?.access_token} />
+      <AddTaskSheet open={sheetOpen} onClose={closeSheet} onSave={addTask} onUpdate={updateTask} days={days} task={editingTask} initialDate={newTaskDate} initialName={brainTaskDraft?.text || ""} categories={categories} profile={profile} allTasks={data.tasks} taskRelianceEnabled={taskRelianceEnabled} pendingReliance={pendingReliance} onAddCategory={() => setCategorySheetOpen(true)} aiAccessToken={session?.access_token} />
       <HabitSheet open={habitSheetOpen} onClose={closeHabitSheet} onSave={addHabit} onUpdate={updateHabit} habit={editingHabit} />
       <CategorySheet open={categorySheetOpen} onClose={() => setCategorySheetOpen(false)} onSave={addCategory} />
       <ProfileSheet open={profileOpen} onClose={() => setProfileOpen(false)} session={session} authLoading={authLoading} syncStatus={syncStatus} notificationsEnabled={notificationsEnabled} notificationSupported={notificationSupported} profile={profile} hiddenFeatures={hiddenFeatures} enabledFeatures={enabledFeatures} theme={selectedTheme} weatherLocation={data.ui?.weatherLocation || null} onSaveProfile={saveProfile} onToggleFeature={toggleFeature} onToggleEnabledFeature={toggleEnabledFeature} onSetTheme={setTheme} onSaveWeatherLocation={saveWeatherLocation} onResetLayout={resetScreenLayout} onEnableNotifications={enableNotifications} onGoogleSignIn={signInWithGoogle} onSignIn={signIn} onSignOut={signOut} />
