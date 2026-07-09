@@ -341,6 +341,23 @@ function normalizeTask(task) {
 function totalRelianceLinks(task) {
   return normalizeRelianceIds(task?.dependsOn).length + normalizeRelianceIds(task?.requiredFor).length;
 }
+function relianceLinksForTask(task, allTasks = []) {
+  if (!task) return [];
+  const byId = new Map(allTasks.map((item) => [item.id, item]));
+  const links = [];
+  const pushLink = (type, linkedTask) => {
+    if (!linkedTask || linkedTask.id === task.id) return;
+    if (links.some((item) => item.task.id === linkedTask.id && item.type === type)) return;
+    links.push({ type, task: linkedTask });
+  };
+  normalizeRelianceIds(task.dependsOn).forEach((id) => pushLink("Depends on", byId.get(id)));
+  normalizeRelianceIds(task.requiredFor).forEach((id) => pushLink("Required for", byId.get(id)));
+  allTasks.forEach((candidate) => {
+    if (normalizeRelianceIds(candidate.requiredFor).includes(task.id)) pushLink("Depends on", candidate);
+    if (normalizeRelianceIds(candidate.dependsOn).includes(task.id)) pushLink("Required for", candidate);
+  });
+  return links;
+}
 function normalizeData(raw) {
   const fallback = seedData();
   if (!raw || typeof raw !== "object") return fallback;
@@ -645,12 +662,7 @@ function TaskRow({ task, allTasks = [], relianceEnabled = false, linkedMode = "n
   const listStats = checklistStats(task);
   const hasChecklist = listStats.total > 0;
   const checklistComplete = !hasChecklist || listStats.done === listStats.total;
-  const linkedTasks = relianceEnabled
-    ? [
-      ...normalizeRelianceIds(task.dependsOn).map((id) => ({ type: "Depends on", task: allTasks.find((item) => item.id === id) })).filter((item) => item.task),
-      ...normalizeRelianceIds(task.requiredFor).map((id) => ({ type: "Required for", task: allTasks.find((item) => item.id === id) })).filter((item) => item.task),
-    ]
-    : [];
+  const linkedTasks = relianceEnabled ? relianceLinksForTask(task, allTasks) : [];
   function openNote(anchor) {
     const rect = anchor.getBoundingClientRect();
     const width = Math.min(280, window.innerWidth - 24);
@@ -713,9 +725,9 @@ function TaskRow({ task, allTasks = [], relianceEnabled = false, linkedMode = "n
   return (
     <motion.div
       layout
-      className="relative overflow-hidden rounded-xl"
+      className="relative rounded-xl"
     >
-      <div className="absolute inset-0 flex items-center justify-between rounded-xl bg-slate-100">
+      <div className="absolute inset-x-0 top-0 flex h-full max-h-28 items-center justify-between overflow-hidden rounded-xl bg-slate-100">
         <div
           className="flex h-full min-w-24 items-center gap-2 bg-emerald-500 px-4 text-xs font-bold text-white"
           style={{ opacity: completeProgress, transform: `scale(${0.92 + completeProgress * 0.08})` }}
@@ -735,7 +747,7 @@ function TaskRow({ task, allTasks = [], relianceEnabled = false, linkedMode = "n
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
-      className={`group/task relative flex items-start gap-3 rounded-xl bg-white ${compact ? "p-2" : "p-3"} ${onDragStart ? "cursor-grab active:cursor-grabbing" : ""} hover:bg-slate-50`}
+      className={`group/task relative z-10 flex items-start gap-3 rounded-xl bg-white ${compact ? "p-2" : "p-3"} ${onDragStart ? "cursor-grab active:cursor-grabbing" : ""} hover:bg-slate-50`}
       style={{
         transform: `translateX(${swipeOffset}px)`,
         transition: swipeSettling ? "transform 220ms cubic-bezier(.2,1.4,.35,1)" : "none",
@@ -860,26 +872,29 @@ function TaskRow({ task, allTasks = [], relianceEnabled = false, linkedMode = "n
       ), document.body)}
     </motion.div>
     {!!linkedTasks.length && (
-      <div className={`space-y-1.5 bg-white ${compact ? "px-2 pb-2" : "px-3 pb-3"}`}>
+      <div className={`relative z-10 bg-white ${compact ? "px-2 pb-2" : "px-3 pb-3"}`}>
+        <div className="absolute bottom-4 left-[1.55rem] top-0 w-px border-l-2 border-dashed border-[var(--theme-ring)]" />
         {linkedTasks.map(({ type, task: linked }) => {
           const linkedStats = checklistStats(linked);
           const canComplete = linkedMode === "complete" && (linked.done || linkedStats.total === 0 || linkedStats.done === linkedStats.total);
           return (
-            <button
-              type="button"
-              key={`${type}-${linked.id}`}
-              onClick={(event) => {
-                event.stopPropagation();
-                if (linkedMode === "complete" && canComplete) onToggleLinkedTask?.(linked.id);
-                else onOpenLinkedTask?.(linked);
-              }}
-              className="ml-8 flex w-[calc(100%-2rem)] items-center gap-2 rounded-xl border border-dashed border-[var(--theme-ring)] bg-[var(--theme-soft)] px-3 py-2 text-left text-xs text-[#112849] hover:border-[var(--theme-accent)]"
-              title={linkedMode === "complete" ? "Click to complete linked task when allowed" : "Open linked task"}
-            >
-              <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[var(--theme-accent)]">{type}</span>
-              <span className={`min-w-0 flex-1 truncate font-semibold ${linked.done ? "text-slate-400 line-through" : ""}`}>{linked.name}</span>
-              <span className="shrink-0 text-[10px] font-semibold text-slate-400">{pretty(new Date(`${linked.date}T00:00:00`), { day: "numeric", month: "short" })}</span>
-            </button>
+            <div key={`${type}-${linked.id}`} className="relative pl-8 pt-2">
+              <span className="absolute left-[1.55rem] top-1/2 h-px w-5 border-t-2 border-dashed border-[var(--theme-ring)]" />
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (linkedMode === "complete" && canComplete) onToggleLinkedTask?.(linked.id);
+                  else onOpenLinkedTask?.(linked);
+                }}
+                className="flex w-full items-center gap-2 rounded-xl border border-dashed border-[var(--theme-ring)] bg-[var(--theme-soft)] px-3 py-2 text-left text-xs text-[#112849] shadow-sm hover:border-[var(--theme-accent)] hover:bg-white"
+                title={linkedMode === "complete" ? "Click to complete linked task when allowed" : "Open linked task"}
+              >
+                <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[var(--theme-accent)] ring-1 ring-[var(--theme-ring)]">{type}</span>
+                <span className={`min-w-0 flex-1 truncate font-semibold ${linked.done ? "text-slate-400 line-through" : ""}`}>{linked.name}</span>
+                <span className="shrink-0 text-[10px] font-semibold text-slate-400">{pretty(new Date(`${linked.date}T00:00:00`), { day: "numeric", month: "short" })}</span>
+              </button>
+            </div>
           );
         })}
       </div>
@@ -3000,8 +3015,9 @@ export default function ADHDeedsApp() {
   function toggleTask(id) {
     const currentTask = data.tasks.find((task) => task.id === id);
     if (taskRelianceEnabled && currentTask && !currentTask.done) {
-      const blockers = normalizeRelianceIds(currentTask.dependsOn)
-        .map((linkId) => data.tasks.find((task) => task.id === linkId))
+      const blockers = relianceLinksForTask(currentTask, data.tasks)
+        .filter((link) => link.type === "Depends on")
+        .map((link) => link.task)
         .filter((task) => task && !task.done);
       if (blockers.length) {
         setRescheduleAdvice(`${currentTask.name} depends on ${blockers[0].name}. Complete that linked task first.`);
