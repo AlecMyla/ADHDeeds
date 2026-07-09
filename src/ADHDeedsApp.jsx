@@ -2410,7 +2410,7 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [dependsOn, setDependsOn] = useState([]);
   const [requiredFor, setRequiredFor] = useState([]);
-  const [relianceMode, setRelianceMode] = useState("dependsOn");
+  const [relianceMode, setRelianceMode] = useState("");
   const [relianceSearch, setRelianceSearch] = useState("");
   const [reliancePickerOpen, setReliancePickerOpen] = useState(false);
   useEffect(() => {
@@ -2443,7 +2443,7 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
       setDependsOn(seededDependsOn);
       setRequiredFor(seededRequiredFor);
     }
-    setRelianceMode("dependsOn");
+    setRelianceMode("");
     setRelianceSearch("");
     setReliancePickerOpen(false);
     setDatePickerOpen(false);
@@ -2492,6 +2492,7 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
   }
   function addExistingReliance(id) {
     if (!id || id === task?.id || dependsOn.includes(id) || requiredFor.includes(id) || totalRelianceLinks({ dependsOn, requiredFor }) >= 8) return;
+    if (!relianceMode) return;
     if (relianceMode === "dependsOn") setDependsOn((items) => addUniqueLimited(items, id));
     else setRequiredFor((items) => addUniqueLimited(items, id));
     setRelianceSearch("");
@@ -2571,6 +2572,16 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
       setChecklistStatus(error.message || "AI checklist suggestions are unavailable right now.");
     }
   }
+  const availableRelianceTasks = allTasks.filter((item) => item.id !== task?.id && !dependsOn.includes(item.id) && !requiredFor.includes(item.id));
+  const weekStartKey = isoDate(days[0]);
+  const weekEndKey = isoDate(days[6]);
+  const thisWeeksRelianceTasks = availableRelianceTasks.filter((item) => item.date >= weekStartKey && item.date <= weekEndKey);
+  const searchText = relianceSearch.trim().toLowerCase();
+  const searchedRelianceTasks = availableRelianceTasks
+    .filter((item) => `${item.name} ${item.category || ""}`.toLowerCase().includes(searchText))
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(0, 30);
+  const displayedRelianceTasks = searchText ? searchedRelianceTasks : thisWeeksRelianceTasks.sort((a, b) => a.date.localeCompare(b.date));
   return (
     <AnimatePresence>
       {open && (
@@ -2664,25 +2675,30 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
                       ) : null;
                     })}
                   </div>
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    <button type="button" onClick={() => setReliancePickerOpen((open) => !open)} disabled={totalRelianceLinks({ dependsOn, requiredFor }) >= 8} className="rounded-xl bg-white py-2.5 text-xs font-semibold text-slate-600 ring-1 ring-slate-200 disabled:text-slate-300">Existing task</button>
-                    <button type="button" onClick={() => saveAndCreateLinkedTask(relianceMode)} disabled={totalRelianceLinks({ dependsOn, requiredFor }) >= 8 || !name.trim() || !category} className="rounded-xl bg-[var(--theme-soft)] py-2.5 text-xs font-semibold text-[var(--theme-accent)] ring-1 ring-[var(--theme-ring)] disabled:bg-slate-100 disabled:text-slate-300 disabled:ring-slate-200">New task</button>
-                  </div>
-                  {reliancePickerOpen && (
+                  {!relianceMode && (
+                    <div className="mt-3 rounded-xl bg-white px-3 py-2 text-xs font-medium text-slate-400 ring-1 ring-slate-200">
+                      Choose whether this task depends on another task, or is required for another task.
+                    </div>
+                  )}
+                  {relianceMode && (
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <button type="button" onClick={() => setReliancePickerOpen((open) => !open)} disabled={totalRelianceLinks({ dependsOn, requiredFor }) >= 8} className="rounded-xl bg-white py-2.5 text-xs font-semibold text-slate-600 ring-1 ring-slate-200 disabled:text-slate-300">Existing task</button>
+                      <button type="button" onClick={() => saveAndCreateLinkedTask(relianceMode)} disabled={totalRelianceLinks({ dependsOn, requiredFor }) >= 8 || !name.trim() || !category} className="rounded-xl bg-[var(--theme-soft)] py-2.5 text-xs font-semibold text-[var(--theme-accent)] ring-1 ring-[var(--theme-ring)] disabled:bg-slate-100 disabled:text-slate-300 disabled:ring-slate-200">New task</button>
+                    </div>
+                  )}
+                  {relianceMode && reliancePickerOpen && (
                     <div className="mt-3 rounded-xl bg-white p-2 ring-1 ring-slate-200">
-                      <input value={relianceSearch} onChange={(event) => setRelianceSearch(event.target.value)} placeholder="Search tasks..." className="mb-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[var(--theme-accent)]" />
+                      <input value={relianceSearch} onChange={(event) => setRelianceSearch(event.target.value)} placeholder="Search All Tasks" className="mb-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[var(--theme-accent)]" />
+                      <div className="mb-1 px-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">{searchText ? "Search results" : "This week’s tasks"}</div>
                       <div className="max-h-44 space-y-1 overflow-y-auto">
-                        {allTasks
-                          .filter((item) => item.id !== task?.id && !dependsOn.includes(item.id) && !requiredFor.includes(item.id))
-                          .filter((item) => `${item.name} ${item.category || ""}`.toLowerCase().includes(relianceSearch.toLowerCase()))
-                          .slice(0, 20)
+                        {displayedRelianceTasks
                           .map((item) => (
                             <button type="button" key={item.id} onClick={() => addExistingReliance(item.id)} className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left hover:bg-slate-50">
                               <span className="min-w-0 truncate text-sm font-semibold text-[#112849]">{item.name}</span>
                               <span className="shrink-0 text-[10px] font-semibold text-slate-400">{pretty(new Date(`${item.date}T00:00:00`), { day: "numeric", month: "short" })}</span>
                             </button>
                           ))}
-                        {!allTasks.filter((item) => item.id !== task?.id).length && <div className="p-3 text-center text-xs text-slate-400">No other tasks yet.</div>}
+                        {!displayedRelianceTasks.length && <div className="p-3 text-center text-xs text-slate-400">{searchText ? "No matching tasks." : "No other tasks this week. Use Search All Tasks to find one further away."}</div>}
                       </div>
                     </div>
                   )}
