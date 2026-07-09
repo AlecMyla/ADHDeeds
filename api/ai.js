@@ -25,10 +25,12 @@ Task: ${JSON.stringify(payload.task)}`;
   if (type === "daily-plan") {
     return `${shared}
 Return JSON shaped exactly like {"items":["..."],"opinion":"..."}.
-Make a daily plan from the visible tasks and habits. Energy mode is ${payload.energy}.
+Make Today's Plan from the visible tasks and habits. Energy mode is ${payload.energy}.
 Tasks may include isBlocked, blockedBy, and unlocks fields from Task Reliance.
 Do not schedule a blocked task as a direct action until its blockers are done. Instead schedule the blocker first, or phrase the blocked task as waiting on that blocker.
 Treat tasks that unlock other tasks as higher leverage when choosing the order.
+Use the user's actual task context to make the wording feel familiar and specific. If tasks can naturally pair together, say so.
+Prefer natural phrasing like "Kick your day off by taking your meds with your coffee" over stiff phrasing like "Start with Take Meds to set a positive tone".
 If energy mode is "push", include every visible open task and every visible open habit for the day. Do not cap the number of items.
 If energy mode is "low", use at most 3 items.
 If energy mode is "normal", use at most 4 items.
@@ -76,12 +78,14 @@ Task and context: ${JSON.stringify({ task: payload.task, profile: payload.profil
     return `${shared}
 Return JSON shaped exactly like {"weather":["..."],"planning":["..."],"rut":"...","protect":"...","weatherUnavailable":false}.
 Create a short beta briefing for today.
-Use weather when present: UV index, feels-like temperature, and rain/probability of precipitation.
-Give practical suggestions such as umbrella, sunscreen, jumper, timing outdoor errands, or lighter physical load.
+Use weather when present: UV index, daily high feels-like temperature, daily high actual temperature, and rain/probability of precipitation.
+Give practical suggestions such as umbrella, sunscreen, jumper, timing outdoor errands, lighter physical load, or drinking water on hot days.
+If maxTempC or feelsLikeTempC is 27C or higher, include a direct but friendly hydration suggestion.
 Use task/habit signals to spot overload, repeated moving, missed habits, growing friction, or checklist-heavy days.
 Use Task Reliance fields when present: mention blocked tasks, blockers, and tasks that unlock other work. Prefer "clear the blocker" over pushing a blocked task.
 Use profile.hobbies and profile.interests as restorative context, especially if the user seems in a rut, has a blank/light day, has mostly admin tasks, or has no visible task connected to something they enjoy.
 Be creative but grounded: suggest tiny hobby/interest-adjacent actions, sensory resets, curiosity prompts, or a small reward bridge that fits the day. Do not turn hobbies into guilt or another obligation.
+Use familiar, conversational wording. Combine task context where useful: if "Take Meds" and coffee-related tasks exist, mention meds with coffee; if errands and heat exist, mention water before leaving; if a blocker exists, name the blocker plainly.
 Examples of the style: if they like music, suggest one song while starting the first task; if they like football, suggest checking fixtures after one admin win; if they like gardening, suggest two minutes outside before a hard task; if they like reading, suggest one page as a reset.
 For rut advice, use research-led but plain-language strategies: reduce activation energy, implementation intentions, two-minute start, environmental cue, body doubling, task chunking, and self-compassion.
 Use profile context lightly for tone and relevance. If profile.adhdStatus is "Undiagnosed" or "Exploring", you may include a gentle, UK-context note that they can ask their GP about NHS ADHD assessment options and Right to Choose in England, but do not diagnose or imply they have ADHD.
@@ -113,7 +117,7 @@ async function fetchOpenMeteoWeather(location = {}) {
     latitude: latitude.toFixed(4),
     longitude: longitude.toFixed(4),
     current: "apparent_temperature,precipitation,rain,showers,weather_code",
-    daily: "uv_index_max,precipitation_probability_max,precipitation_sum,apparent_temperature_max,apparent_temperature_min",
+    daily: "uv_index_max,precipitation_probability_max,precipitation_sum,apparent_temperature_max,apparent_temperature_min,temperature_2m_max",
     forecast_days: "1",
     timezone: "auto",
   };
@@ -131,7 +135,8 @@ async function fetchOpenMeteoWeather(location = {}) {
     source: "Open-Meteo UK Met Office",
     locationName: String(location.name || "").trim(),
     uvIndex: daily.uv_index_max?.[0] ?? null,
-    feelsLikeTempC: current.apparent_temperature ?? daily.apparent_temperature_max?.[0] ?? null,
+    feelsLikeTempC: daily.apparent_temperature_max?.[0] ?? current.apparent_temperature ?? null,
+    maxTempC: daily.temperature_2m_max?.[0] ?? null,
     rainProbability: daily.precipitation_probability_max?.[0] ?? null,
     rainAmountMm: daily.precipitation_sum?.[0] ?? current.precipitation ?? current.rain ?? current.showers ?? null,
     weatherCode: current.weather_code ?? null,

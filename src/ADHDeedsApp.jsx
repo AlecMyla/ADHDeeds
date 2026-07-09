@@ -86,8 +86,8 @@ const WEEK_SECTION_ORDER = ["stats", "nudges", "tasks"];
 const SECTION_WIDTHS = ["full", "half"];
 const FEATURE_OPTIONS = [
   { id: "stats", label: "Stats" },
-  { id: "dailyPlan", label: "Daily plan" },
-  { id: "habitsInDailyPlan", label: "Habits in daily plan", sub: true },
+  { id: "dailyPlan", label: "Today's Plan" },
+  { id: "habitsInDailyPlan", label: "Habits in Today's Plan", sub: true },
   { id: "worthNext", label: "Worth doing next" },
   { id: "brainDumpster", label: "Brain Dumpster" },
 ];
@@ -549,6 +549,9 @@ function buildDailyPlan(today, tasks, habits, energy, allTasks = tasks, reliance
     const unlocks = blockedTasks.filter((blocked) => relianceBlockers(blocked, allTasks, relianceEnabled).some((blocker) => blocker.id === task.id));
     return unlocks.length ? `${task.name} (${task.points} pts) - unlocks ${unlocks[0].name}` : `${task.name} (${task.points} pts)`;
   });
+  const medTaskIndex = plan.findIndex((item) => /\b(meds?|medication|medicine)\b/i.test(item));
+  const coffeeTask = openTasks.find((task) => /\b(coffee|cafe|caffeine)\b/i.test(`${task.name} ${task.notes || ""}`));
+  if (medTaskIndex >= 0 && coffeeTask) plan[medTaskIndex] = plan[medTaskIndex].replace(/\s-\s.*$/, "") + " - pair it with your coffee";
   if (blockedTasks.length && energy !== "push") plan.push(`${blockedTasks[0].name} is waiting on ${relianceBlockers(blockedTasks[0], allTasks, relianceEnabled)[0]?.name}`);
   if (energy === "push") openHabits.forEach((habit) => plan.push(`${habit.name} (${habit.points} pts)`));
   else if (openHabits[0]) plan.push(`${openHabits[0].name} (${openHabits[0].points} pts)`);
@@ -1428,6 +1431,7 @@ function TodayConsiderationsCard({ today, tasks, allTasks, habits, profile, weat
           ...taskWithRelianceContext(task, allTasks, taskRelianceEnabled),
           name: task.name,
           category: task.category,
+          notes: task.notes || "",
           points: task.points,
           done: task.done,
           important: task.important,
@@ -1542,7 +1546,7 @@ function DailyPlanCard({ today, tasks, allTasks, habits, taskRelianceEnabled, ai
     <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200/70">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2 text-sm font-bold text-[#112849]"><Sparkles size={16} className="text-[var(--theme-accent)]" /> Daily plan</div>
+          <div className="flex items-center gap-2 text-sm font-bold text-[#112849]"><Sparkles size={16} className="text-[var(--theme-accent)]" /> Today's Plan</div>
           <p className="mt-1 text-xs text-slate-400">A realistic order for today.</p>
         </div>
         <div className="flex rounded-xl bg-slate-100 p-1">
