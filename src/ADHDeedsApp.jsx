@@ -358,6 +358,24 @@ function relianceLinksForTask(task, allTasks = []) {
   });
   return links;
 }
+function relianceBlockers(task, allTasks = [], enabled = false) {
+  if (!enabled) return [];
+  return relianceLinksForTask(task, allTasks)
+    .filter((link) => link.type === "Depends on")
+    .map((link) => link.task)
+    .filter((linkedTask) => linkedTask && !linkedTask.done);
+}
+function taskWithRelianceContext(task, allTasks = [], enabled = false) {
+  const blockers = relianceBlockers(task, allTasks, enabled);
+  return {
+    ...task,
+    blockedBy: blockers.map((item) => ({ id: item.id, name: item.name, date: item.date, category: item.category })),
+    isBlocked: blockers.length > 0,
+    unlocks: enabled
+      ? relianceLinksForTask(task, allTasks).filter((link) => link.type === "Required for").map((link) => ({ id: link.task.id, name: link.task.name, date: link.task.date, done: link.task.done }))
+      : [],
+  };
+}
 function normalizeData(raw) {
   const fallback = seedData();
   if (!raw || typeof raw !== "object") return fallback;
@@ -515,13 +533,23 @@ function reframeTask(task) {
   return { firstStep: `Spend 10 minutes starting ${task.name}`, note: "Make the task smaller than your resistance to it." };
 }
 
-function buildDailyPlan(today, tasks, habits, energy) {
+function buildDailyPlan(today, tasks, habits, energy, allTasks = tasks, relianceEnabled = false) {
   const todayKey = isoDate(today);
   const openTasks = sortPriority(tasks.filter((task) => task.date === todayKey && !task.done));
+  const unblockedTasks = openTasks.filter((task) => !relianceBlockers(task, allTasks, relianceEnabled).length);
+  const blockedTasks = openTasks.filter((task) => relianceBlockers(task, allTasks, relianceEnabled).length);
+  const unlockTasks = blockedTasks
+    .flatMap((task) => relianceBlockers(task, allTasks, relianceEnabled))
+    .filter((task, index, list) => list.findIndex((item) => item.id === task.id) === index && !task.done);
+  const candidateTasks = sortPriority([...unlockTasks, ...unblockedTasks].filter((task, index, list) => list.findIndex((item) => item.id === task.id) === index));
   const limit = energy === "low" ? 2 : energy === "push" ? openTasks.length : 3;
-  const chosen = openTasks.slice(0, limit);
+  const chosen = candidateTasks.slice(0, limit);
   const openHabits = habits.filter((item) => !item.ticks[todayKey]);
-  const plan = chosen.map((task) => `${task.name} (${task.points} pts)`);
+  const plan = chosen.map((task) => {
+    const unlocks = blockedTasks.filter((blocked) => relianceBlockers(blocked, allTasks, relianceEnabled).some((blocker) => blocker.id === task.id));
+    return unlocks.length ? `${task.name} (${task.points} pts) - unlocks ${unlocks[0].name}` : `${task.name} (${task.points} pts)`;
+  });
+  if (blockedTasks.length && energy !== "push") plan.push(`${blockedTasks[0].name} is waiting on ${relianceBlockers(blockedTasks[0], allTasks, relianceEnabled)[0]?.name}`);
   if (energy === "push") openHabits.forEach((habit) => plan.push(`${habit.name} (${habit.points} pts)`));
   else if (openHabits[0]) plan.push(`${openHabits[0].name} (${openHabits[0].points} pts)`);
   if (!plan.length) return ["Keep the day light: everything visible for today is already clear."];
@@ -1356,9 +1384,11 @@ function profileTopics(profile = {}) {
     .slice(0, 4);
 }
 
-function fallbackConsiderations(today, tasks, habits, profile = defaultProfile()) {
+function fallbackConsiderations(today, tasks, habits, profile = defaultProfile(), allTasks = tasks, relianceEnabled = false) {
   const todayKey = isoDate(today);
   const todayTasks = tasks.filter((task) => task.date === todayKey && !task.done);
+  const blockedTasks = todayTasks.filter((task) => relianceBlockers(task, allTasks, relianceEnabled).length);
+  const unlockTasks = todayTasks.filter((task) => relianceLinksForTask(task, allTasks).some((link) => link.type === "Required for" && !link.task.done));
   const movedTasks = todayTasks.filter((task) => task.movedCount || task.penaltyCount).length;
   const openHabits = habits.filter((habit) => !habit.ticks[todayKey]).length;
   const topics = profileTopics(profile);
@@ -1366,6 +1396,8 @@ function fallbackConsiderations(today, tasks, habits, profile = defaultProfile()
   const missingEnjoyment = topics.length && !topics.some((topic) => taskText.includes(topic.toLowerCase()));
   const considerations = [];
   if (todayTasks.length >= 5) considerations.push("This is a fuller day. Pick one task to protect and let the rest queue behind it.");
+  if (blockedTasks.length) considerations.push(`${blockedTasks[0].name} is blocked by ${relianceBlockers(blockedTasks[0], allTasks, relianceEnabled)[0]?.name}. Clearing the blocker is the kinder next move.`);
+  if (unlockTasks.length) considerations.push(`${unlockTasks[0].name} unlocks another task, so it may create more momentum than its points suggest.`);
   if (movedTasks) considerations.push("A few tasks look like they have been carried forward. Try shrinking one to a two-minute first step.");
   if (openHabits >= 3) considerations.push("Several habits are still open. Choose one anchor habit rather than trying to rescue everything at once.");
   if (todayTasks.some((task) => /call|phone|appointment|gp|dentist|book|submit|pay/i.test(task.name))) considerations.push("There is a time-sensitive-looking task here. Doing it earlier may reduce friction.");
@@ -1378,11 +1410,11 @@ function fallbackConsiderations(today, tasks, habits, profile = defaultProfile()
     rut: topics.length
       ? `If you feel stuck, borrow a little energy from ${topics[0]}: pair it with the first two-minute step, then stop before it becomes another job.`
       : "If you feel stuck, make the first action smaller rather than pushing harder.",
-    protect: todayTasks.sort((a, b) => Number(b.important) - Number(a.important) || b.points - a.points)[0]?.name || "one easy win",
+    protect: sortPriority(todayTasks.filter((task) => !relianceBlockers(task, allTasks, relianceEnabled).length))[0]?.name || "one easy win",
   };
 }
 
-function TodayConsiderationsCard({ today, tasks, habits, profile, weatherLocation, aiAccessToken }) {
+function TodayConsiderationsCard({ today, tasks, allTasks, habits, profile, weatherLocation, taskRelianceEnabled, aiAccessToken }) {
   const [briefing, setBriefing] = useState(null);
   const [status, setStatus] = useState("");
   const todayKey = isoDate(today);
@@ -1393,6 +1425,7 @@ function TodayConsiderationsCard({ today, tasks, habits, profile, weatherLocatio
       const result = await askAI("today-considerations", {
         date: todayKey,
         tasks: tasks.filter((task) => task.date === todayKey).map((task) => ({
+          ...taskWithRelianceContext(task, allTasks, taskRelianceEnabled),
           name: task.name,
           category: task.category,
           points: task.points,
@@ -1415,7 +1448,7 @@ function TodayConsiderationsCard({ today, tasks, habits, profile, weatherLocatio
       setBriefing(result);
       setStatus(result.weatherUnavailable ? "Add a weather location in Me > Customise" : "Updated");
     } catch (error) {
-      setBriefing(fallbackConsiderations(today, tasks, habits, profile));
+      setBriefing(fallbackConsiderations(today, tasks, habits, profile, allTasks, taskRelianceEnabled));
       setStatus(error.message || "Using built-in considerations");
     }
   }
@@ -1425,7 +1458,7 @@ function TodayConsiderationsCard({ today, tasks, habits, profile, weatherLocatio
     setStatus("");
   }, [todayKey]);
 
-  const visible = briefing || fallbackConsiderations(today, tasks, habits, profile);
+  const visible = briefing || fallbackConsiderations(today, tasks, habits, profile, allTasks, taskRelianceEnabled);
   const items = [
     ...(visible.weather || []).map((text) => ({ label: "Weather", text })),
     ...(visible.planning || []).map((text) => ({ label: "Planning", text })),
@@ -1458,13 +1491,13 @@ function TodayConsiderationsCard({ today, tasks, habits, profile, weatherLocatio
   );
 }
 
-function DailyPlanCard({ today, tasks, habits, aiAccessToken }) {
+function DailyPlanCard({ today, tasks, allTasks, habits, taskRelianceEnabled, aiAccessToken }) {
   const [energy, setEnergy] = useState("normal");
   const [aiPlan, setAiPlan] = useState(null);
   const [aiStatus, setAiStatus] = useState("");
   const [orderedPlan, setOrderedPlan] = useState([]);
   const [dragPlanIndex, setDragPlanIndex] = useState(null);
-  const fallbackPlan = useMemo(() => buildDailyPlan(today, tasks, habits, energy), [today, tasks, habits, energy]);
+  const fallbackPlan = useMemo(() => buildDailyPlan(today, tasks, habits, energy, allTasks, taskRelianceEnabled), [today, tasks, allTasks, habits, energy, taskRelianceEnabled]);
   const plan = useMemo(() => (aiPlan?.items?.length ? aiPlan.items : fallbackPlan), [aiPlan, fallbackPlan]);
   const planKey = plan.join("\u0001");
 
@@ -1475,7 +1508,7 @@ function DailyPlanCard({ today, tasks, habits, aiAccessToken }) {
       const result = await askAI("daily-plan", {
         date: todayKey,
         energy,
-        tasks: tasks.filter((task) => task.date === todayKey && !task.done),
+        tasks: tasks.filter((task) => task.date === todayKey && !task.done).map((task) => taskWithRelianceContext(task, allTasks, taskRelianceEnabled)),
         habits: habits.filter((habit) => !habit.ticks[todayKey]).map((habit) => ({ name: habit.name, detail: habit.detail, points: habit.points, mode: habit.mode })),
       }, aiAccessToken);
       setAiPlan(result);
@@ -1668,12 +1701,13 @@ function TodayView({ today, selectedDate, tasks, allTasks, habits, brainDump, ca
     setSelectionMode(false);
   }
   const hidden = new Set(hiddenFeatures);
+  const taskRelianceEnabled = enabledFeatures.includes("taskReliance");
   const sections = {
     plan: {
-      content: <DailyPlanCard today={selectedDate} tasks={tasks} habits={hidden.has("habitsInDailyPlan") ? [] : habits} aiAccessToken={aiAccessToken} />,
+      content: <DailyPlanCard today={selectedDate} tasks={tasks} allTasks={allTasks} habits={hidden.has("habitsInDailyPlan") ? [] : habits} taskRelianceEnabled={taskRelianceEnabled} aiAccessToken={aiAccessToken} />,
     },
     considerations: {
-      content: <TodayConsiderationsCard today={selectedDate} tasks={tasks} habits={habits} profile={profile} weatherLocation={weatherLocation} aiAccessToken={aiAccessToken} />,
+      content: <TodayConsiderationsCard today={selectedDate} tasks={tasks} allTasks={allTasks} habits={habits} profile={profile} weatherLocation={weatherLocation} taskRelianceEnabled={taskRelianceEnabled} aiAccessToken={aiAccessToken} />,
     },
     tasks: {
       content: (
@@ -3022,9 +3056,18 @@ export default function ADHDeedsApp() {
   const profile = normalizeProfile(data.profile);
   const categories = data.categories || [];
   const categoryNudges = categories.map((category) => {
-    const task = [...weekTasks]
-      .filter((item) => item.category === category && !item.done)
-      .sort((a, b) => Number(b.important) - Number(a.important) || b.points - a.points)[0];
+    const openCategoryTasks = weekTasks.filter((item) => item.category === category && !item.done);
+    const unblocked = openCategoryTasks.filter((item) => !relianceBlockers(item, data.tasks, taskRelianceEnabled).length);
+    const blockersForCategory = openCategoryTasks
+      .flatMap((item) => relianceBlockers(item, data.tasks, taskRelianceEnabled))
+      .filter((item) => item.category === category && !item.done);
+    const candidates = [...blockersForCategory, ...unblocked]
+      .filter((item, index, list) => list.findIndex((candidate) => candidate.id === item.id) === index);
+    const task = candidates
+      .sort((a, b) => {
+        const unlockDelta = relianceLinksForTask(b, data.tasks).filter((link) => link.type === "Required for" && !link.task.done).length - relianceLinksForTask(a, data.tasks).filter((link) => link.type === "Required for" && !link.task.done).length;
+        return unlockDelta || Number(b.important) - Number(a.important) || b.points - a.points;
+      })[0];
     return task ? { category, task } : null;
   }).filter(Boolean);
 
@@ -3356,7 +3399,8 @@ export default function ADHDeedsApp() {
   }
   async function openOpinion(task) {
     const context = {
-      sameDayOpenTasks: weekTasks.filter((item) => item.date === task.date && !item.done).map((item) => ({ name: item.name, points: item.points, important: item.important })),
+      sameDayOpenTasks: weekTasks.filter((item) => item.date === task.date && !item.done).map((item) => taskWithRelianceContext(item, data.tasks, taskRelianceEnabled)),
+      selectedTaskReliance: taskWithRelianceContext(task, data.tasks, taskRelianceEnabled),
       categories,
     };
     setAiInsight({

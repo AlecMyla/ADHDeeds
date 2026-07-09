@@ -26,6 +26,9 @@ Task: ${JSON.stringify(payload.task)}`;
     return `${shared}
 Return JSON shaped exactly like {"items":["..."],"opinion":"..."}.
 Make a daily plan from the visible tasks and habits. Energy mode is ${payload.energy}.
+Tasks may include isBlocked, blockedBy, and unlocks fields from Task Reliance.
+Do not schedule a blocked task as a direct action until its blockers are done. Instead schedule the blocker first, or phrase the blocked task as waiting on that blocker.
+Treat tasks that unlock other tasks as higher leverage when choosing the order.
 If energy mode is "push", include every visible open task and every visible open habit for the day. Do not cap the number of items.
 If energy mode is "low", use at most 3 items.
 If energy mode is "normal", use at most 4 items.
@@ -76,6 +79,7 @@ Create a short beta briefing for today.
 Use weather when present: UV index, feels-like temperature, and rain/probability of precipitation.
 Give practical suggestions such as umbrella, sunscreen, jumper, timing outdoor errands, or lighter physical load.
 Use task/habit signals to spot overload, repeated moving, missed habits, growing friction, or checklist-heavy days.
+Use Task Reliance fields when present: mention blocked tasks, blockers, and tasks that unlock other work. Prefer "clear the blocker" over pushing a blocked task.
 Use profile.hobbies and profile.interests as restorative context, especially if the user seems in a rut, has a blank/light day, has mostly admin tasks, or has no visible task connected to something they enjoy.
 Be creative but grounded: suggest tiny hobby/interest-adjacent actions, sensory resets, curiosity prompts, or a small reward bridge that fits the day. Do not turn hobbies into guilt or another obligation.
 Examples of the style: if they like music, suggest one song while starting the first task; if they like football, suggest checking fixtures after one admin win; if they like gardening, suggest two minutes outside before a hard task; if they like reading, suggest one page as a reset.
