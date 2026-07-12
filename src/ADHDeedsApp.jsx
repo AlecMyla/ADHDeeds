@@ -1699,7 +1699,7 @@ function TodaySection({ id, children, onMove, onPreview, onClearPreview, onPoint
   );
 }
 
-function TodayView({ today, selectedDate, tasks, allTasks, habits, brainDump, categories, profile, hiddenFeatures, enabledFeatures, weatherLocation, aiAccessToken, themeColor, todaySectionOrder, todaySectionWidths, onPreviousDay, onNextDay, onJumpToday, onReorderSection, onToggleTask, onToggleChecklistItem, onToggleHabit, onEditTask, onOpenLinkedTask, onRemoveTask, onAddTask, onAddBrainDumpItems, onRemoveBrainDumpItem, onConvertBrainDumpItem, onAddCategory, onReframeTask, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, onMoveTasks, nudges, points, progress }) {
+function TodayView({ today, selectedDate, tasks, allTasks, habits, brainDump, categories, profile, hiddenFeatures, enabledFeatures, weatherLocation, aiAccessToken, themeColor, todaySectionOrder, todaySectionWidths, onPreviousDay, onNextDay, onJumpToday, onReorderSection, onToggleTask, onToggleChecklistItem, onToggleHabit, onEditTask, onOpenLinkedTask, onRemoveTask, onAddTask, onAddBrainDumpItems, onRemoveBrainDumpItem, onConvertBrainDumpItem, onConvertBrainDumpItemAI, onAddCategory, onReframeTask, onAskOpinion, onMoveTomorrow, onMoveTomorrowPenalty, onMoveTasks, nudges, points, progress }) {
   const selectedKey = isoDate(selectedDate);
   const todayKey = isoDate(today);
   const isToday = selectedKey === todayKey;
@@ -1793,7 +1793,7 @@ function TodayView({ today, selectedDate, tasks, allTasks, habits, brainDump, ca
       content: <CategoryNudges nudges={nudges} onAskOpinion={onAskOpinion} />,
     },
     dumpster: {
-      content: <BrainDumpsterView items={brainDump} categories={categories} onAddItems={onAddBrainDumpItems} onRemoveItem={onRemoveBrainDumpItem} onConvertItem={onConvertBrainDumpItem} onAddCategory={onAddCategory} compact />,
+      content: <BrainDumpsterView items={brainDump} categories={categories} onAddItems={onAddBrainDumpItems} onRemoveItem={onRemoveBrainDumpItem} onConvertItem={onConvertBrainDumpItem} onConvertItemAI={onConvertBrainDumpItemAI} onAddCategory={onAddCategory} compact />,
     },
     habits: {
       content: (
@@ -2316,8 +2316,9 @@ function HabitsView({ days, habits, onToggle, onAdd, onEdit, onRemove }) {
   );
 }
 
-function BrainDumpsterView({ items, categories, onAddItems, onRemoveItem, onConvertItem, onAddCategory, compact = false }) {
+function BrainDumpsterView({ items, categories, onAddItems, onRemoveItem, onConvertItem, onConvertItemAI, onAddCategory, compact = false }) {
   const [text, setText] = useState("");
+  const [aiConvertingId, setAiConvertingId] = useState("");
 
   function submit(event) {
     event.preventDefault();
@@ -2356,6 +2357,19 @@ function BrainDumpsterView({ items, categories, onAddItems, onRemoveItem, onConv
               <div className="mt-1 text-[11px] text-slate-400">Captured {new Date(item.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</div>
             </div>
             <div className="flex shrink-0 items-center gap-1">
+              {onConvertItemAI && (
+                <button
+                  onClick={async () => {
+                    setAiConvertingId(item.id);
+                    await onConvertItemAI(item);
+                    setAiConvertingId("");
+                  }}
+                  disabled={!categories.length || aiConvertingId === item.id}
+                  className="rounded-lg bg-[var(--theme-header)] px-3 py-2 text-xs font-semibold text-white ring-1 ring-[var(--theme-header)] disabled:bg-slate-100 disabled:text-slate-400 disabled:ring-slate-200"
+                >
+                  {aiConvertingId === item.id ? "Thinking..." : "AI task"}
+                </button>
+              )}
               <button
                 onClick={() => onConvertItem(item)}
                 disabled={!categories.length}
@@ -3252,6 +3266,43 @@ export default function ADHDeedsApp() {
     setNewTaskDate(isoDate(today));
     setSheetOpen(true);
   }
+  async function convertBrainDumpItemAI(item) {
+    if (!categories.length) {
+      setRescheduleAdvice("Create a category before turning dumped items into tasks.");
+      return;
+    }
+    const weekDates = days.map((day) => isoDate(day));
+    try {
+      const result = await askAI("brain-dump-task", {
+        text: item.text,
+        categories,
+        weekDates,
+        today: isoDate(today),
+        profile,
+      }, session?.access_token);
+      const category = categories.includes(result.category) ? result.category : categories[0];
+      const date = weekDates.includes(result.date) ? result.date : isoDate(today);
+      const points = POINT_OPTIONS.some((option) => option.value === Number(result.points)) ? Number(result.points) : 10;
+      addTask({
+        id: `task-${Date.now()}`,
+        name: String(result.name || item.text).trim(),
+        category,
+        date,
+        points,
+        done: false,
+        important: !!result.important,
+        notes: String(result.notes || item.text).trim(),
+        website: "",
+        checklist: [],
+        recurrence: "none",
+      });
+      removeBrainDumpItem(item.id);
+      setRescheduleAdvice("Brain dump turned into a task.");
+    } catch (error) {
+      setRescheduleAdvice(`${error.message || "AI is unavailable right now."} Opening manual task creation instead.`);
+      convertBrainDumpItem(item);
+    }
+  }
   function moveTask(id, date, penalize = false) {
     if (!id || !date) return;
     const currentTask = data.tasks.find((task) => task.id === id);
@@ -3516,9 +3567,9 @@ export default function ADHDeedsApp() {
             <button key={tab.id} onClick={() => setView(tab.id)} className={`rounded-full px-5 py-2.5 text-sm font-semibold ${view === tab.id ? "bg-[var(--theme-header)] text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>{tab.label}</button>
           ))}
         </div>
-        {view === "today" && <TodayView today={today} selectedDate={selectedTodayDate} tasks={weekTasks} allTasks={data.tasks} habits={data.habits} brainDump={data.brainDump || []} categories={categories} profile={profile} hiddenFeatures={hiddenFeatures} enabledFeatures={enabledFeatures} weatherLocation={data.ui?.weatherLocation || null} aiAccessToken={session?.access_token} themeColor={selectedThemeColors.header} todaySectionOrder={todaySectionOrder} todaySectionWidths={todaySectionWidths} onPreviousDay={() => moveTodayDate(-1)} onNextDay={() => moveTodayDate(1)} onJumpToday={() => setTodayDate(new Date())} onReorderSection={reorderTodaySection} onToggleTask={toggleTask} onToggleChecklistItem={toggleChecklistItem} onToggleHabit={toggleHabit} onEditTask={openEditTask} onOpenLinkedTask={openLinkedTask} onRemoveTask={removeTask} onAddTask={openAddTask} onAddBrainDumpItems={addBrainDumpItems} onRemoveBrainDumpItem={removeBrainDumpItem} onConvertBrainDumpItem={convertBrainDumpItem} onAddCategory={() => setCategorySheetOpen(true)} onReframeTask={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} onMoveTasks={moveTasks} nudges={categoryNudges} points={points} progress={todayProgress} />}
+        {view === "today" && <TodayView today={today} selectedDate={selectedTodayDate} tasks={weekTasks} allTasks={data.tasks} habits={data.habits} brainDump={data.brainDump || []} categories={categories} profile={profile} hiddenFeatures={hiddenFeatures} enabledFeatures={enabledFeatures} weatherLocation={data.ui?.weatherLocation || null} aiAccessToken={session?.access_token} themeColor={selectedThemeColors.header} todaySectionOrder={todaySectionOrder} todaySectionWidths={todaySectionWidths} onPreviousDay={() => moveTodayDate(-1)} onNextDay={() => moveTodayDate(1)} onJumpToday={() => setTodayDate(new Date())} onReorderSection={reorderTodaySection} onToggleTask={toggleTask} onToggleChecklistItem={toggleChecklistItem} onToggleHabit={toggleHabit} onEditTask={openEditTask} onOpenLinkedTask={openLinkedTask} onRemoveTask={removeTask} onAddTask={openAddTask} onAddBrainDumpItems={addBrainDumpItems} onRemoveBrainDumpItem={removeBrainDumpItem} onConvertBrainDumpItem={convertBrainDumpItem} onConvertBrainDumpItemAI={convertBrainDumpItemAI} onAddCategory={() => setCategorySheetOpen(true)} onReframeTask={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} onMoveTasks={moveTasks} nudges={categoryNudges} points={points} progress={todayProgress} />}
         {view === "week" && <WeekView days={days} tasks={weekTasks} allTasks={data.tasks} weekSectionOrder={weekSectionOrder} weekSectionWidths={weekSectionWidths} hiddenFeatures={hiddenFeatures} enabledFeatures={enabledFeatures} themeColor={selectedThemeColors.header} onReorderSection={reorderWeekSection} onToggle={toggleTask} onToggleChecklistItem={toggleChecklistItem} onRemove={removeTask} onEdit={openEditTask} onOpenLinkedTask={openLinkedTask} onAddTask={openAddTask} onReframe={openReframeTask} onAskOpinion={openOpinion} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} onMoveTask={moveTask} onMoveTasks={moveTasks} today={today} points={points} taskPoints={taskPoints} habitPoints={habitPoints} nudges={categoryNudges} />}
-        {view === "dumpster" && <BrainDumpsterView items={data.brainDump || []} categories={categories} onAddItems={addBrainDumpItems} onRemoveItem={removeBrainDumpItem} onConvertItem={convertBrainDumpItem} onAddCategory={() => setCategorySheetOpen(true)} />}
+        {view === "dumpster" && <BrainDumpsterView items={data.brainDump || []} categories={categories} onAddItems={addBrainDumpItems} onRemoveItem={removeBrainDumpItem} onConvertItem={convertBrainDumpItem} onConvertItemAI={convertBrainDumpItemAI} onAddCategory={() => setCategorySheetOpen(true)} />}
         {view === "habits" && <HabitsView days={days} habits={data.habits} onToggle={toggleHabit} onAdd={openAddHabit} onEdit={openEditHabit} onRemove={removeHabit} />}
         {view === "tasks" && <AllTasksView tasks={weekTasks} allTasks={data.tasks} categories={categories} relianceEnabled={taskRelianceEnabled} onAddCategory={() => setCategorySheetOpen(true)} onReorderCategory={reorderCategory} onToggle={toggleTask} onToggleChecklistItem={toggleChecklistItem} onRemove={removeTask} onAdd={openAddTask} onEdit={openEditTask} onReframe={openReframeTask} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} />}
       </main>

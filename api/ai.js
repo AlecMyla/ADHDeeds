@@ -51,6 +51,19 @@ If the task involves booking, buying, submitting, packing, cleaning, admin, or t
 Task and context: ${JSON.stringify({ task: payload.task, profile: payload.profile || {} })}`;
   }
 
+  if (type === "brain-dump-task") {
+    return `${shared}
+Return JSON shaped exactly like {"name":"...","category":"...","date":"YYYY-MM-DD","points":10,"important":false,"notes":"..."}.
+Turn this brain dump entry into one clear task.
+Use the user's available categories exactly; if none fit, choose the closest available category.
+Use one of these point values only: 5, 10, 20.
+Choose a realistic date from the provided week when possible. Prefer today for quick actions, tomorrow/later this week for vague or lower-urgency items.
+Make the task title concrete and action-led. Keep it short, but preserve important nouns from the original thought.
+Use notes for useful context from the brain dump, but do not repeat the title.
+Mark important only if the text suggests urgency, appointments, money, health, deadlines, someone waiting, or meaningful consequences.
+Data: ${JSON.stringify(payload)}`;
+  }
+
   if (type === "opinion") {
     return `${shared}
 Return JSON shaped exactly like {"title":"AI opinion","note":"...","firstStep":"..."}.
