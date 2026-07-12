@@ -656,23 +656,42 @@ function MoveTasksSheet({ open, count, initialDate, onClose, onMove }) {
   useEffect(() => {
     if (open) setDate(initialDate || isoDate(new Date()));
   }, [open, initialDate]);
+  useEffect(() => {
+    if (!open) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [open]);
   return (
     <AnimatePresence>
       {open && (
         <>
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="fixed inset-0 z-40 bg-slate-950/40" />
-          <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 14 }} className="fixed inset-x-4 top-1/2 z-50 mx-auto max-w-sm -translate-y-1/2 rounded-3xl bg-white p-4 shadow-2xl">
-            <div className="mb-4 flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-bold text-[#112849]">Move {count} task{count === 1 ? "" : "s"}</h2>
-                <p className="mt-1 text-xs text-slate-400">Choose the new date.</p>
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 24 }}
+            className="fixed inset-x-0 bottom-0 z-50 max-h-[92dvh] overflow-hidden rounded-t-[28px] bg-white shadow-2xl sm:inset-x-4 sm:bottom-auto sm:top-1/2 sm:mx-auto sm:max-w-sm sm:-translate-y-1/2 sm:rounded-3xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="max-h-[92dvh] overflow-y-auto overscroll-contain px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4">
+              <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-slate-200 sm:hidden" />
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-bold text-[#112849]">Move {count} task{count === 1 ? "" : "s"}</h2>
+                  <p className="mt-1 text-xs text-slate-400">Choose the new date.</p>
+                </div>
+                <button type="button" onClick={onClose} className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-slate-100 text-slate-500"><X size={18} /></button>
               </div>
-              <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-slate-100 text-slate-500"><X size={18} /></button>
+              <MiniCalendar value={date} onChange={setDate} />
+              <div className="sticky bottom-0 -mx-4 mt-3 bg-white/95 px-4 pb-1 pt-3 backdrop-blur">
+                <button type="button" onClick={() => onMove(date)} className="w-full rounded-xl bg-[var(--theme-accent)] py-3 text-sm font-semibold text-white">
+                  Move to {pretty(new Date(`${date}T00:00:00`), { weekday: "short", day: "numeric", month: "short" })}
+                </button>
+              </div>
             </div>
-            <MiniCalendar value={date} onChange={setDate} />
-            <button type="button" onClick={() => onMove(date)} className="mt-3 w-full rounded-xl bg-[var(--theme-accent)] py-3 text-sm font-semibold text-white">
-              Move to {pretty(new Date(`${date}T00:00:00`), { weekday: "short", day: "numeric", month: "short" })}
-            </button>
           </motion.div>
         </>
       )}
