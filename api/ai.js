@@ -56,6 +56,8 @@ Task and context: ${JSON.stringify({ task: payload.task, profile: payload.profil
 Return JSON shaped exactly like {"name":"...","category":"...","date":"YYYY-MM-DD","points":10,"important":false,"notes":"..."}.
 Turn this brain dump entry into one clear task.
 Use the user's available categories exactly; if none fit, choose the closest available category.
+Use the user's learning/corrections when provided. If they previously corrected similar wording from one category to another, prefer their chosen category.
+Treat learning as personal preference, not universal truth.
 Use one of these point values only: 5, 10, 20.
 Choose a realistic date from the provided week when possible. Prefer today for quick actions, tomorrow/later this week for vague or lower-urgency items.
 Make the task title concrete and action-led. Keep it short, but preserve important nouns from the original thought.

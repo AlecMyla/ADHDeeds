@@ -311,6 +311,7 @@ function seedData() {
     brainDump: [],
     categories: DEFAULT_CATEGORIES,
     recurringTasks: [],
+    aiPreferences: { brainDumpTaskCorrections: [] },
     profile: defaultProfile(),
     ui: { todayOrder: TODAY_SECTION_ORDER, weekOrder: WEEK_SECTION_ORDER, todayWidths: {}, weekWidths: {}, hiddenFeatures: [], enabledFeatures: [], theme: DEFAULT_THEME_ID, weatherLocation: null },
   };
@@ -431,6 +432,13 @@ function normalizeData(raw) {
     habits,
     brainDump,
     recurringTasks,
+    aiPreferences: {
+      ...(fallback.aiPreferences || {}),
+      ...(raw.aiPreferences || {}),
+      brainDumpTaskCorrections: Array.isArray(raw.aiPreferences?.brainDumpTaskCorrections)
+        ? raw.aiPreferences.brainDumpTaskCorrections.slice(-30)
+        : [],
+    },
     profile: normalizeProfile(raw.profile),
     ui: { ...(raw.ui || {}), todayOrder, weekOrder, todayWidths, weekWidths, hiddenFeatures, enabledFeatures, theme, weatherLocation },
     categories,
@@ -2465,7 +2473,7 @@ function AllTasksView({ tasks, allTasks, categories, relianceEnabled, onAddCateg
   );
 }
 
-function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate, initialName = "", categories, profile, allTasks = [], taskRelianceEnabled, pendingReliance, onAddCategory, aiAccessToken }) {
+function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate, initialName = "", initialDraft = null, categories, profile, allTasks = [], taskRelianceEnabled, pendingReliance, onAddCategory, aiAccessToken }) {
   const [name, setName] = useState("");
   const [category, setCategory] = useState(categories[0] || "");
   const [date, setDate] = useState(isoDate(days[0]));
@@ -2487,12 +2495,12 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
   const [reliancePickerOpen, setReliancePickerOpen] = useState(false);
   useEffect(() => {
     if (!open) return;
-    setName(task?.name || initialName);
-    setCategory(task?.category || categories[0] || "");
-    setDate(task?.date || initialDate || isoDate(days[0]));
-    setPoints(task?.points || 10);
-    setImportant(!!task?.important);
-    setNotes(task?.notes || "");
+    setName(task?.name || initialDraft?.name || initialName);
+    setCategory(task?.category || initialDraft?.category || categories[0] || "");
+    setDate(task?.date || initialDraft?.date || initialDate || isoDate(days[0]));
+    setPoints(task?.points || initialDraft?.points || 10);
+    setImportant(task ? !!task.important : !!initialDraft?.important);
+    setNotes(task?.notes || initialDraft?.notes || "");
     setWebsite(task?.website || "");
     setRecurrence("none");
     setBreakdown([]);
@@ -2519,7 +2527,7 @@ function AddTaskSheet({ open, onClose, onSave, onUpdate, days, task, initialDate
     setRelianceSearch("");
     setReliancePickerOpen(false);
     setDatePickerOpen(false);
-  }, [open, days, task, initialDate, initialName, categories, pendingReliance]);
+  }, [open, days, task, initialDate, initialName, initialDraft, categories, pendingReliance]);
   useEffect(() => {
     if (open && !category && categories.length) setCategory(categories[0]);
   }, [open, category, categories]);
@@ -3172,13 +3180,32 @@ export default function ADHDeedsApp() {
       setSheetOpen(true);
     }, 0);
   }
+  function brainDumpCorrectionForTask(taskFields) {
+    if (!brainTaskDraft?.aiSuggestion) return null;
+    const suggestion = brainTaskDraft.aiSuggestion;
+    const correction = {
+      sourceText: brainTaskDraft.text,
+      suggestedCategory: suggestion.category || "",
+      chosenCategory: taskFields.category || "",
+      suggestedPoints: suggestion.points || 10,
+      chosenPoints: taskFields.points || 10,
+      createdAt: new Date().toISOString(),
+    };
+    if (correction.suggestedCategory === correction.chosenCategory && correction.suggestedPoints === correction.chosenPoints) return null;
+    return correction;
+  }
   function addTask(task, options = {}) {
     const normalized = normalizeTask(task);
     if (task.recurrence && task.recurrence !== "none") {
       const recurringId = `recurring-${Date.now()}`;
       const { recurrence, ...taskFields } = normalized;
-      setData((old) => ({
-        ...old,
+      setData((old) => {
+        const correction = brainDumpCorrectionForTask(taskFields);
+        return {
+          ...old,
+          aiPreferences: correction
+            ? { ...(old.aiPreferences || {}), brainDumpTaskCorrections: [...(old.aiPreferences?.brainDumpTaskCorrections || []), correction].slice(-30) }
+            : old.aiPreferences,
         recurringTasks: [
           ...(old.recurringTasks || []),
           {
@@ -3196,18 +3223,25 @@ export default function ADHDeedsApp() {
           },
         ],
         brainDump: brainTaskDraft ? (old.brainDump || []).filter((item) => item.id !== brainTaskDraft.id) : (old.brainDump || []),
-        tasks: syncRelianceForTask([...old.tasks, { ...taskFields, recurringId }], normalized.id),
-      }));
+          tasks: syncRelianceForTask([...old.tasks, { ...taskFields, recurringId }], normalized.id),
+        };
+      });
       setBrainTaskDraft(null);
       continueLinkedTaskFlow({ ...taskFields, recurringId }, options);
       return;
     }
     const { recurrence, ...taskFields } = normalized;
-    setData((old) => ({
-      ...old,
+    setData((old) => {
+      const correction = brainDumpCorrectionForTask(taskFields);
+      return {
+        ...old,
+        aiPreferences: correction
+          ? { ...(old.aiPreferences || {}), brainDumpTaskCorrections: [...(old.aiPreferences?.brainDumpTaskCorrections || []), correction].slice(-30) }
+          : old.aiPreferences,
       brainDump: brainTaskDraft ? (old.brainDump || []).filter((item) => item.id !== brainTaskDraft.id) : (old.brainDump || []),
       tasks: syncRelianceForTask([...old.tasks, taskFields], taskFields.id),
-    }));
+      };
+    });
     setBrainTaskDraft(null);
     continueLinkedTaskFlow(taskFields, options);
   }
@@ -3279,25 +3313,25 @@ export default function ADHDeedsApp() {
         weekDates,
         today: isoDate(today),
         profile,
+        learning: data.aiPreferences?.brainDumpTaskCorrections || [],
       }, session?.access_token);
       const category = categories.includes(result.category) ? result.category : categories[0];
       const date = weekDates.includes(result.date) ? result.date : isoDate(today);
       const points = POINT_OPTIONS.some((option) => option.value === Number(result.points)) ? Number(result.points) : 10;
-      addTask({
-        id: `task-${Date.now()}`,
+      const aiSuggestion = {
         name: String(result.name || item.text).trim(),
         category,
         date,
         points,
-        done: false,
         important: !!result.important,
         notes: String(result.notes || item.text).trim(),
-        website: "",
-        checklist: [],
-        recurrence: "none",
-      });
-      removeBrainDumpItem(item.id);
-      setRescheduleAdvice("Brain dump turned into a task.");
+      };
+      setEditingTask(null);
+      setBrainTaskDraft({ ...item, aiSuggestion });
+      setNewTaskDate(date);
+      setPendingReliance(null);
+      setSheetOpen(true);
+      setRescheduleAdvice("AI drafted a task. Check it, tweak it, then save.");
     } catch (error) {
       setRescheduleAdvice(`${error.message || "AI is unavailable right now."} Opening manual task creation instead.`);
       convertBrainDumpItem(item);
@@ -3574,7 +3608,7 @@ export default function ADHDeedsApp() {
         {view === "tasks" && <AllTasksView tasks={weekTasks} allTasks={data.tasks} categories={categories} relianceEnabled={taskRelianceEnabled} onAddCategory={() => setCategorySheetOpen(true)} onReorderCategory={reorderCategory} onToggle={toggleTask} onToggleChecklistItem={toggleChecklistItem} onRemove={removeTask} onAdd={openAddTask} onEdit={openEditTask} onReframe={openReframeTask} onMoveTomorrow={(id) => moveTaskToTomorrow(id)} onMoveTomorrowPenalty={(id) => moveTaskToTomorrow(id, true)} />}
       </main>
       <BottomNav view={view} setView={setView} />
-      <AddTaskSheet open={sheetOpen} onClose={closeSheet} onSave={addTask} onUpdate={updateTask} days={days} task={editingTask} initialDate={newTaskDate} initialName={brainTaskDraft?.text || ""} categories={categories} profile={profile} allTasks={data.tasks} taskRelianceEnabled={taskRelianceEnabled} pendingReliance={pendingReliance} onAddCategory={() => setCategorySheetOpen(true)} aiAccessToken={session?.access_token} />
+      <AddTaskSheet open={sheetOpen} onClose={closeSheet} onSave={addTask} onUpdate={updateTask} days={days} task={editingTask} initialDate={newTaskDate} initialName={brainTaskDraft?.text || ""} initialDraft={brainTaskDraft?.aiSuggestion || null} categories={categories} profile={profile} allTasks={data.tasks} taskRelianceEnabled={taskRelianceEnabled} pendingReliance={pendingReliance} onAddCategory={() => setCategorySheetOpen(true)} aiAccessToken={session?.access_token} />
       <HabitSheet open={habitSheetOpen} onClose={closeHabitSheet} onSave={addHabit} onUpdate={updateHabit} habit={editingHabit} />
       <CategorySheet open={categorySheetOpen} onClose={() => setCategorySheetOpen(false)} onSave={addCategory} />
       <ProfileSheet open={profileOpen} onClose={() => setProfileOpen(false)} session={session} authLoading={authLoading} syncStatus={syncStatus} notificationsEnabled={notificationsEnabled} notificationSupported={notificationSupported} profile={profile} hiddenFeatures={hiddenFeatures} enabledFeatures={enabledFeatures} theme={selectedTheme} weatherLocation={data.ui?.weatherLocation || null} onSaveProfile={saveProfile} onToggleFeature={toggleFeature} onToggleEnabledFeature={toggleEnabledFeature} onSetTheme={setTheme} onSaveWeatherLocation={saveWeatherLocation} onResetLayout={resetScreenLayout} onEnableNotifications={enableNotifications} onGoogleSignIn={signInWithGoogle} onSignIn={signIn} onSignOut={signOut} />
