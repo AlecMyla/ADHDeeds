@@ -79,6 +79,7 @@ const RECURRENCE_OPTIONS = [
   { label: "Does not repeat", value: "none" },
   { label: "Daily", value: "daily" },
   { label: "Weekly", value: "weekly" },
+  { label: "Fortnightly", value: "fortnightly" },
   { label: "Monthly", value: "monthly" },
 ];
 const TODAY_SECTION_ORDER = ["plan", "considerations", "tasks", "dumpster", "nudges", "habits"];
@@ -273,6 +274,7 @@ function recurrenceMatches(template, dateKey) {
   const gap = daysBetween(template.startDate, dateKey);
   if (template.frequency === "daily") return gap >= 0;
   if (template.frequency === "weekly") return gap >= 0 && gap % 7 === 0;
+  if (template.frequency === "fortnightly") return gap >= 0 && gap % 14 === 0;
   if (template.frequency === "monthly") {
     return new Date(`${template.startDate}T00:00:00`).getDate() === new Date(`${dateKey}T00:00:00`).getDate();
   }
